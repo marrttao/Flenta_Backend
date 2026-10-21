@@ -1,6 +1,7 @@
 using Flenta.Domain.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Flenta.Application.Features.Auth;
 
 namespace Flenta.Api.Middleware;
 
@@ -14,11 +15,19 @@ internal sealed class GlobalExceptionHandler(
         CancellationToken cancellationToken)
     {
         var validationException = exception as DomainValidationException;
-        var status = validationException is null
-            ? StatusCodes.Status500InternalServerError
-            : StatusCodes.Status400BadRequest;
+        var applicationFailure = exception as ApplicationFailureException;
+        var status = applicationFailure?.Kind switch
+        {
+            FailureKind.Unauthorized => StatusCodes.Status401Unauthorized,
+            FailureKind.Forbidden => StatusCodes.Status403Forbidden,
+            FailureKind.Conflict => StatusCodes.Status409Conflict,
+            FailureKind.RateLimited => StatusCodes.Status429TooManyRequests,
+            FailureKind.Unavailable => StatusCodes.Status503ServiceUnavailable,
+            FailureKind.InvalidRequest => StatusCodes.Status400BadRequest,
+            _ => validationException is not null ? StatusCodes.Status400BadRequest : StatusCodes.Status500InternalServerError
+        };
 
-        if (validationException is null)
+        if (status == StatusCodes.Status500InternalServerError)
         {
             logger.LogError(exception, "Unhandled exception. TraceId: {TraceId}", httpContext.TraceIdentifier);
         }
@@ -26,7 +35,8 @@ internal sealed class GlobalExceptionHandler(
         var problem = new ProblemDetails
         {
             Status = status,
-            Title = validationException is null ? "An unexpected error occurred." : "Validation failed.",
+            Title = applicationFailure is not null ? applicationFailure.Message
+                : validationException is not null ? "Validation failed." : "An unexpected error occurred.",
             Detail = validationException?.Message,
             Instance = httpContext.Request.Path
         };
@@ -35,6 +45,7 @@ internal sealed class GlobalExceptionHandler(
         {
             problem.Extensions["code"] = validationException.Code;
         }
+        if (applicationFailure is not null) problem.Extensions["code"] = applicationFailure.Code;
 
         httpContext.Response.StatusCode = status;
 

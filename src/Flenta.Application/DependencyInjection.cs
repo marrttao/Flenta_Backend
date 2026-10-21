@@ -1,13 +1,15 @@
 using Microsoft.Extensions.DependencyInjection;
+using Flenta.Application.Features.Auth;
+using Flenta.Application.Features.Profile;
 
 namespace Flenta.Application;
 
 public static class DependencyInjection
 {
-    /// <summary>Composition entry point for use cases as features are implemented.</summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // No registration or authentication use cases are implemented in the architecture stage.
+        services.AddScoped<AuthenticationService>();
+        services.AddScoped<ProfileService>();
         return services;
     }
 }

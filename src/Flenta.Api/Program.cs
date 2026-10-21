@@ -7,12 +7,22 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services
     .AddApplication()
     .AddInfrastructure()
-    .AddApi();
+    .AddApi(builder.Configuration);
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/auth") || context.Request.Path.StartsWithSegments("/api/profile"))
+        context.Response.Headers.CacheControl = "no-store";
+    await next(context);
+});
+app.UseCors();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
