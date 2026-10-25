@@ -24,6 +24,7 @@ internal sealed class GlobalExceptionHandler(
             FailureKind.RateLimited => StatusCodes.Status429TooManyRequests,
             FailureKind.Unavailable => StatusCodes.Status503ServiceUnavailable,
             FailureKind.InvalidRequest => StatusCodes.Status400BadRequest,
+            FailureKind.NotFound => StatusCodes.Status404NotFound,
             _ => validationException is not null ? StatusCodes.Status400BadRequest : StatusCodes.Status500InternalServerError
         };
 

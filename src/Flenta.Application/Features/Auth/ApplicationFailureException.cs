@@ -1,6 +1,6 @@
 namespace Flenta.Application.Features.Auth;
 
-public enum FailureKind { Unauthorized, Forbidden, Conflict, RateLimited, Unavailable, InvalidRequest }
+public enum FailureKind { Unauthorized, Forbidden, Conflict, RateLimited, Unavailable, InvalidRequest, NotFound }
 
 public sealed class ApplicationFailureException(FailureKind kind, string code, string message) : Exception(message)
 {

@@ -15,7 +15,9 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.Use(async (context, next) =>
 {
-    if (context.Request.Path.StartsWithSegments("/api/auth") || context.Request.Path.StartsWithSegments("/api/profile"))
+    if (context.Request.Path.StartsWithSegments("/api/auth") || context.Request.Path.StartsWithSegments("/api/profile")
+        || context.Request.Path.StartsWithSegments("/api/accounts") || context.Request.Path.StartsWithSegments("/api/cards")
+        || context.Request.Path.StartsWithSegments("/api/transactions"))
         context.Response.Headers.CacheControl = "no-store";
     await next(context);
 });
