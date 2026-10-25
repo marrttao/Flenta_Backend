@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 #pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
 
-namespace Flenta.Infrastructure.Persistence.Banking.Migrations
+namespace Flenta.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class InitialBanking : Migration

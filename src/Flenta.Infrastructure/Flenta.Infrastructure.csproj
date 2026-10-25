@@ -9,6 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="../Flenta.Application/Flenta.Application.csproj" />
     <ProjectReference Include="../Flenta.Domain/Flenta.Domain.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.13" />

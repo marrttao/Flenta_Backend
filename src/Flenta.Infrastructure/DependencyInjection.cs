@@ -11,6 +11,7 @@ using Flenta.Infrastructure.Persistence.Banking;
 using Flenta.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
 
 namespace Flenta.Infrastructure;
 
@@ -31,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<IIdentityProvider, SupabaseIdentityProvider>();
         services.AddScoped<IUserProfileRepository, SupabaseUserProfileRepository>();
         services.AddOptions<BankingOptions>().BindConfiguration("Banking")
+            .Configure<IConfiguration>((options, configuration) =>
+                options.ConnectionString = DatabaseConfiguration.ResolveConnectionString(configuration, options.ConnectionString) ?? "")
             .Validate(options => options.IbanFeeRate is >= 0 and <= 1
                 && options.MinimumIbanFeeMinorUnits is >= 0 and <= Money.MaximumMinorUnits,
                 "Banking fee configuration is invalid.")
@@ -38,7 +41,7 @@ public static class DependencyInjection
                 && BankingOptions.ValidKey(options.CardEncryptionKey),
                 "Enabled banking requires a PostgreSQL connection and a base64-encoded 32-byte card encryption key.")
             .ValidateOnStart();
-        services.AddDbContext<BankingDbContext>((provider, builder) =>
+        services.AddDbContext<AppDbContext>((provider, builder) =>
         {
             var connection = provider.GetRequiredService<IOptions<BankingOptions>>().Value.ConnectionString;
             builder.UseNpgsql(string.IsNullOrWhiteSpace(connection) ? null : connection);

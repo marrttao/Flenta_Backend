@@ -11,7 +11,7 @@ using Npgsql;
 
 namespace Flenta.Infrastructure.Persistence.Banking;
 
-internal sealed class PostgresBankingStore(BankingDbContext db, IOptions<BankingOptions> options) : IBankingRepository, IBankingUnitOfWork
+internal sealed class PostgresBankingStore(AppDbContext db, IOptions<BankingOptions> options) : IBankingRepository, IBankingUnitOfWork
 {
     private void EnsureConfigured()
     {

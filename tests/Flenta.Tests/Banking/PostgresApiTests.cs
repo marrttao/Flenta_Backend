@@ -9,6 +9,7 @@ using Flenta.Application.Features.Cards;
 using Flenta.Application.Features.Transactions;
 using Flenta.Domain.Entities;
 using Flenta.Domain.ValueObjects;
+using Flenta.Infrastructure.Persistence;
 using Flenta.Infrastructure.Persistence.Banking;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -62,7 +63,7 @@ public sealed class PostgresApiTests : IAsyncLifetime
         await drop.ExecuteNonQueryAsync();
     }
 
-    private BankingDbContext Context() => new(new DbContextOptionsBuilder<BankingDbContext>().UseNpgsql(connection).Options);
+    private AppDbContext Context() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
 
     private WebApplicationFactory<Program> Host() => new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
     {
@@ -108,6 +109,26 @@ public sealed class PostgresApiTests : IAsyncLifetime
 
     private static async Task<decimal> Balance(HttpClient client, Guid id) =>
         (await client.GetFromJsonAsync<AccountResponse>($"/api/accounts/{id}"))!.Balance;
+
+    [PostgresFact]
+    public async Task Reapplying_migrations_preserves_existing_data_history_and_unmanaged_tables()
+    {
+        using var host = Host();
+        using var alice = Client(host, "alice");
+        var account = await Open(alice);
+        await Operation(alice, $"/api/accounts/{account.Id}/top-ups", new { amount = 42m });
+        await using var db = Context();
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE public.legacy_migration_probe (value integer NOT NULL); INSERT INTO public.legacy_migration_probe VALUES (42);");
+        var before = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
+        await db.Database.MigrateAsync();
+        await db.Database.MigrateAsync();
+        Assert.Equal(before, (await db.Database.GetAppliedMigrationsAsync()).ToArray());
+        Assert.Equal(42m, await Balance(alice, account.Id));
+        await using var verification = new NpgsqlConnection(connection);
+        await verification.OpenAsync();
+        await using var query = new NpgsqlCommand("SELECT value FROM public.legacy_migration_probe", verification);
+        Assert.Equal(42, await query.ExecuteScalarAsync());
+    }
 
     [PostgresFact]
     public async Task Iban_transfer_persists_fee_balanced_postings_and_private_history()

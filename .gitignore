@@ -13,3 +13,4 @@
 !.env.example
 **/appsettings.*.local.json
 *.log
+artifacts/
