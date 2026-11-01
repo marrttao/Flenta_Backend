@@ -32,7 +32,7 @@ public sealed class PostgresFactAttribute : FactAttribute
 public sealed class BankingPostgresCollection;
 
 [Collection("BankingPostgres")]
-public sealed class PostgresApiTests : IAsyncLifetime
+public sealed partial class PostgresApiTests : IAsyncLifetime
 {
     private string connection = "";
     private string database = "";

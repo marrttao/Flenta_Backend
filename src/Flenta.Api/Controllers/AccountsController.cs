@@ -20,7 +20,7 @@ public sealed class AccountsController(AccountService accounts, TransactionServi
     public Task<AccountResponse> Get(Guid id, CancellationToken cancellationToken) => accounts.GetAsync(id, cancellationToken);
 
     [HttpPost]
-    public Task<AccountResponse> Open(CancellationToken cancellationToken) => accounts.OpenAsync(cancellationToken);
+    public Task<AccountResponse> Open(CancellationToken cancellationToken, [FromQuery] string currency = "UAH") => accounts.OpenAsync(cancellationToken, currency);
 
     [HttpPost("{id:guid}/top-ups")]
     public Task<TransactionResponse> TopUp(Guid id, AmountRequest request,

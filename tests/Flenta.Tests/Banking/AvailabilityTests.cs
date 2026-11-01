@@ -14,6 +14,10 @@ public sealed class AvailabilityTests
     [InlineData("/api/accounts")]
     [InlineData("/api/cards")]
     [InlineData("/api/transactions")]
+    [InlineData("/api/goals")]
+    [InlineData("/api/finance/rates")]
+    [InlineData("/api/finance/cashback")]
+    [InlineData("/api/finance/analytics")]
     public async Task Banking_endpoints_require_a_validated_identity(string route)
     {
         using var host = new WebApplicationFactory<Program>();

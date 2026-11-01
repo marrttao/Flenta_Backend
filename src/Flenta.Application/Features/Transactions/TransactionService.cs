@@ -4,6 +4,7 @@ using Flenta.Application.Abstractions;
 using Flenta.Application.Abstractions.Banking;
 using Flenta.Application.Features.Accounts;
 using Flenta.Application.Features.Auth;
+using Flenta.Application.Features.Finance;
 using Flenta.Domain.Entities;
 using Flenta.Domain.Exceptions;
 using Flenta.Domain.ValueObjects;
@@ -11,7 +12,8 @@ using Flenta.Domain.ValueObjects;
 namespace Flenta.Application.Features.Transactions;
 
 public sealed record TransactionResponse(Guid Id, string Kind, string Status, Guid? SourceAccountId, Guid? DestinationAccountId,
-    string? DestinationIban, decimal Amount, decimal Fee, string Currency, DateTimeOffset CreatedAt, DateTimeOffset? FinishedAt, string? FailureCode);
+    string? DestinationIban, decimal Amount, decimal Fee, string Currency, DateTimeOffset CreatedAt, DateTimeOffset? FinishedAt, string? FailureCode, string? DestinationCurrency = null, decimal? ReceivedAmount = null,
+    decimal? ExchangeRate = null, DateOnly? RateDate = null, decimal Cashback = 0, decimal Saved = 0, Guid? GoalId = null, string? SavingsSkipReason = null);
 public sealed record TransferQuote(decimal Amount, decimal Fee, decimal Total, string Currency, bool SufficientFunds);
 
 public sealed class TransactionService(IBankingRepository repository, IBankingUnitOfWork unitOfWork, ICurrentUser user, IClock clock, IFeePolicy fees)
@@ -26,7 +28,7 @@ public sealed class TransactionService(IBankingRepository repository, IBankingUn
         var source = await repository.OwnedAccountAsync(user.Profile.Id, sourceId, cancellationToken) ?? throw AccountService.Missing();
         var fee = fees.Calculate(byIban ? TransactionKind.IbanTransfer : TransactionKind.InternalTransfer, amount);
         var total = amount.Add(fee);
-        return new TransferQuote(amount.Amount, fee.Amount, total.Amount, Money.Currency, source.BalanceMinorUnits >= total.MinorUnits);
+        return new TransferQuote(amount.Amount, fee.Amount, total.Amount, source.CurrencyCode, source.BalanceMinorUnits >= total.MinorUnits);
     }
 
     public Task<TransactionResponse> TopUpAsync(Guid accountId, decimal amount, Guid key, CancellationToken cancellationToken) =>
@@ -55,17 +57,17 @@ public sealed class TransactionService(IBankingRepository repository, IBankingUn
                 return ToResponse(existing);
             }
 
-            _ = await repository.OwnedAccountAsync(user.Profile.Id, customerAccountId, ct) ?? throw AccountService.Missing();
+            var customer = await repository.OwnedAccountAsync(user.Profile.Id, customerAccountId, ct) ?? throw AccountService.Missing();
             if (iban is not null) destinationId = (await repository.AccountByIbanAsync(iban, ct))?.Id;
-            var sourceId = kind == TransactionKind.TopUp ? ClearingAccountId : customerAccountId;
+            var sourceId = kind == TransactionKind.TopUp ? SystemAccounts.Clearing(customer.CurrencyCode) : customerAccountId;
             var targetId = kind == TransactionKind.TopUp ? customerAccountId : destinationId;
             var fee = fees.Calculate(kind, amount);
             var ids = new[] { sourceId, targetId ?? Guid.Empty }
-                .Concat(fee.MinorUnits > 0 ? new[] { FeeAccountId } : [])
+                .Concat(fee.MinorUnits > 0 ? new[] { SystemAccounts.Fees(customer.CurrencyCode) } : [])
                 .Where(id => id != Guid.Empty).Distinct().ToArray();
             var locked = (await repository.LockAccountsAsync(ids, ct)).ToDictionary(a => a.Id);
             var storedTargetId = targetId is not null && locked.TryGetValue(targetId.Value, out var candidate) && candidate.Kind == AccountKind.Customer ? targetId : null;
-            var operation = new BankTransaction(user.Profile.Id, key, fingerprint, kind, sourceId, storedTargetId, iban, amount, fee, clock.UtcNow);
+            var operation = new BankTransaction(user.Profile.Id, key, fingerprint, kind, sourceId, storedTargetId, iban, amount, fee, clock.UtcNow, customer.CurrencyCode);
             repository.Add(operation);
 
             try
@@ -74,17 +76,19 @@ public sealed class TransactionService(IBankingRepository repository, IBankingUn
                     throw new DomainValidationException("transfer.recipient_not_found", "Recipient account does not exist in this sandbox.");
                 if (sourceId == target.Id) throw new DomainValidationException("transfer.same_account", "Source and destination must be different accounts.");
                 var source = locked[sourceId];
-                var revenue = fee.MinorUnits > 0 ? locked[FeeAccountId] : null;
+                if (source.CurrencyCode != target.CurrencyCode)
+                    throw new DomainValidationException("transfer.currency_mismatch", "Use currency exchange for accounts in different currencies.");
+                var revenue = fee.MinorUnits > 0 ? locked[SystemAccounts.Fees(customer.CurrencyCode)] : null;
                 var total = amount.Add(fee);
                 source.EnsureCanDebit(total);
                 target.EnsureCanCredit(amount);
                 if (fee.MinorUnits > 0) revenue!.EnsureCanCredit(fee);
                 var entries = new List<LedgerEntry>
                 {
-                    new(operation.Id, source.Id, -total.MinorUnits, clock.UtcNow),
-                    new(operation.Id, target.Id, amount.MinorUnits, clock.UtcNow)
+                    new(operation.Id, source.Id, -total.MinorUnits, clock.UtcNow, source.CurrencyCode),
+                    new(operation.Id, target.Id, amount.MinorUnits, clock.UtcNow, source.CurrencyCode)
                 };
-                if (fee.MinorUnits > 0) entries.Add(new LedgerEntry(operation.Id, revenue!.Id, fee.MinorUnits, clock.UtcNow));
+                if (fee.MinorUnits > 0) entries.Add(new LedgerEntry(operation.Id, revenue!.Id, fee.MinorUnits, clock.UtcNow, source.CurrencyCode));
                 operation.Complete(entries, clock.UtcNow);
                 source.Debit(total);
                 target.Credit(amount);
@@ -111,5 +115,7 @@ public sealed class TransactionService(IBankingRepository repository, IBankingUn
 
     public static TransactionResponse ToResponse(BankTransaction operation) => new(operation.Id, operation.Kind.ToString(), operation.Status.ToString(),
         operation.Kind == TransactionKind.TopUp ? null : operation.SourceAccountId, operation.DestinationAccountId, operation.DestinationIban,
-        operation.AmountMinorUnits / 100m, operation.FeeMinorUnits / 100m, Money.Currency, operation.CreatedAt, operation.FinishedAt, operation.FailureCode);
+        operation.AmountMinorUnits / 100m, operation.FeeMinorUnits / 100m, operation.CurrencyCode, operation.CreatedAt, operation.FinishedAt, operation.FailureCode,
+        operation.DestinationCurrency, operation.ReceivedMinorUnits / 100m, operation.ExchangeRate, operation.RateDate,
+        operation.CashbackMinorUnits / 100m, operation.SavedMinorUnits / 100m, operation.GoalId, operation.SavingsSkipReason);
 }

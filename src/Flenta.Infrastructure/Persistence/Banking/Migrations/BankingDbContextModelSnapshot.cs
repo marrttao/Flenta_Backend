@@ -34,6 +34,13 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("UAH");
+
                     b.Property<string>("Iban")
                         .HasMaxLength(29)
                         .HasColumnType("character varying(29)");
@@ -57,7 +64,9 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                         {
                             t.HasCheckConstraint("ck_account_balance", "\"Kind\" = 'SandboxClearing' OR \"BalanceMinorUnits\" >= 0");
 
-                            t.HasCheckConstraint("ck_account_owner", "(\"Kind\" = 'Customer' AND \"OwnerId\" IS NOT NULL AND \"Iban\" IS NOT NULL) OR (\"Kind\" IN ('SandboxClearing', 'FeeRevenue') AND \"OwnerId\" IS NULL AND \"Iban\" IS NULL)");
+                            t.HasCheckConstraint("ck_account_currency", "\"CurrencyCode\" IN ('UAH', 'USD', 'EUR')");
+
+                            t.HasCheckConstraint("ck_account_owner", "(\"Kind\" = 'Customer' AND \"OwnerId\" IS NOT NULL AND \"Iban\" IS NOT NULL) OR (\"Kind\" = 'Savings' AND \"OwnerId\" IS NOT NULL AND \"Iban\" IS NULL) OR (\"Kind\" IN ('SandboxClearing', 'FeeRevenue', 'SandboxMerchant') AND \"OwnerId\" IS NULL AND \"Iban\" IS NULL)");
                         });
 
                     b.HasData(
@@ -66,6 +75,7 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000001"),
                             BalanceMinorUnits = 0L,
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "UAH",
                             Kind = "SandboxClearing"
                         },
                         new
@@ -73,7 +83,64 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000002"),
                             BalanceMinorUnits = 0L,
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "UAH",
                             Kind = "FeeRevenue"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000003"),
+                            BalanceMinorUnits = 0L,
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "UAH",
+                            Kind = "SandboxMerchant"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000011"),
+                            BalanceMinorUnits = 0L,
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "USD",
+                            Kind = "SandboxClearing"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000012"),
+                            BalanceMinorUnits = 0L,
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "USD",
+                            Kind = "FeeRevenue"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000013"),
+                            BalanceMinorUnits = 0L,
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "USD",
+                            Kind = "SandboxMerchant"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000021"),
+                            BalanceMinorUnits = 0L,
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "EUR",
+                            Kind = "SandboxClearing"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000022"),
+                            BalanceMinorUnits = 0L,
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "EUR",
+                            Kind = "FeeRevenue"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000023"),
+                            BalanceMinorUnits = 0L,
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            CurrencyCode = "EUR",
+                            Kind = "SandboxMerchant"
                         });
                 });
 
@@ -85,15 +152,33 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                     b.Property<long>("AmountMinorUnits")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("CashbackMinorUnits")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("UAH");
 
                     b.Property<Guid?>("DestinationAccountId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("DestinationCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<string>("DestinationIban")
                         .HasMaxLength(29)
                         .HasColumnType("character varying(29)");
+
+                    b.Property<decimal?>("ExchangeRate")
+                        .HasPrecision(28, 12)
+                        .HasColumnType("numeric(28,12)");
 
                     b.Property<string>("FailureCode")
                         .HasMaxLength(100)
@@ -104,6 +189,9 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
 
                     b.Property<DateTimeOffset?>("FinishedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GoalId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uuid");
@@ -116,10 +204,23 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<DateOnly?>("RateDate")
+                        .HasColumnType("date");
+
+                    b.Property<long?>("ReceivedMinorUnits")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("RequestFingerprint")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<long>("SavedMinorUnits")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SavingsSkipReason")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<Guid>("SourceAccountId")
                         .HasColumnType("uuid");
@@ -148,6 +249,68 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flenta.Domain.Entities.ExchangeQuote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AmountMinorUnits")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DestinationAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DestinationCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(28, 12)
+                        .HasColumnType("numeric(28,12)");
+
+                    b.Property<DateOnly>("RateDate")
+                        .HasColumnType("date");
+
+                    b.Property<long>("ReceivedMinorUnits")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("SourceAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid?>("TransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationAccountId");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("SourceAccountId");
+
+                    b.HasIndex("TransactionId");
+
+                    b.ToTable("exchange_quotes", "banking", t =>
+                        {
+                            t.HasCheckConstraint("ck_exchange_quote", "\"AmountMinorUnits\" > 0 AND \"ReceivedMinorUnits\" > 0 AND \"Rate\" > 0 AND \"SourceCurrency\" <> \"DestinationCurrency\"");
+                        });
+                });
+
             modelBuilder.Entity("Flenta.Domain.Entities.LedgerEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -162,12 +325,19 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("UAH");
+
                     b.Property<Guid>("TransactionId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AccountId");
+                    b.HasIndex("AccountId", "CurrencyCode");
 
                     b.HasIndex("TransactionId", "AccountId")
                         .IsUnique();
@@ -175,6 +345,66 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                     b.ToTable("entries", "banking", t =>
                         {
                             t.HasCheckConstraint("ck_entry_nonzero", "\"AmountMinorUnits\" <> 0");
+                        });
+                });
+
+            modelBuilder.Entity("Flenta.Domain.Entities.SavingsGoal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("Deadline")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("FundingAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Percentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("RoundUpStep")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("TargetMinorUnits")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId")
+                        .IsUnique();
+
+                    b.HasIndex("FundingAccountId")
+                        .IsUnique()
+                        .HasFilter("\"Mode\" <> 'Off' AND NOT \"Archived\"");
+
+                    b.HasIndex("OwnerId");
+
+                    b.ToTable("goals", "banking", t =>
+                        {
+                            t.HasCheckConstraint("ck_goal_settings", "\"TargetMinorUnits\" > 0 AND \"Percentage\" BETWEEN 0 AND 100 AND \"RoundUpStep\" IN (1,5,10,50,100) AND \"Mode\" IN ('Off','Percentage','RoundUp') AND (\"Mode\" <> 'Percentage' OR \"Percentage\" > 0)");
                         });
                 });
 
@@ -247,7 +477,43 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Flenta.Domain.Entities.ExchangeQuote", b =>
+                {
+                    b.HasOne("Flenta.Domain.Entities.BankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("DestinationAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flenta.Domain.Entities.BankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("SourceAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flenta.Domain.Entities.BankTransaction", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Flenta.Domain.Entities.LedgerEntry", b =>
+                {
+                    b.HasOne("Flenta.Domain.Entities.BankTransaction", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Flenta.Domain.Entities.BankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId", "CurrencyCode")
+                        .HasPrincipalKey("Id", "CurrencyCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Flenta.Domain.Entities.SavingsGoal", b =>
                 {
                     b.HasOne("Flenta.Domain.Entities.BankAccount", null)
                         .WithMany()
@@ -255,9 +521,9 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Flenta.Domain.Entities.BankTransaction", null)
+                    b.HasOne("Flenta.Domain.Entities.BankAccount", null)
                         .WithMany()
-                        .HasForeignKey("TransactionId")
+                        .HasForeignKey("FundingAccountId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

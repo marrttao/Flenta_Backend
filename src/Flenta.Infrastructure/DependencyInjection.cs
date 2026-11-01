@@ -9,6 +9,7 @@ using Flenta.Application.Features.Transactions;
 using Flenta.Domain.ValueObjects;
 using Flenta.Infrastructure.Persistence.Banking;
 using Flenta.Infrastructure.Security;
+using Flenta.Infrastructure.Exchange;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -44,6 +45,8 @@ public static class DependencyInjection
             builder.UseNpgsql(string.IsNullOrWhiteSpace(connection) ? null : connection);
         });
         services.AddScoped<PostgresBankingStore>();
+        services.AddScoped<IFinanceRepository>(provider => provider.GetRequiredService<PostgresBankingStore>());
+        services.AddHttpClient<IExchangeRateProvider, NbuExchangeRateProvider>(client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IBankingRepository>(provider => provider.GetRequiredService<PostgresBankingStore>());
         services.AddScoped<IBankingUnitOfWork>(provider => provider.GetRequiredService<PostgresBankingStore>());
         services.AddSingleton<ICardVault, SandboxCardVault>();

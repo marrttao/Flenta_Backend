@@ -16,14 +16,14 @@ public sealed class AccountService(IBankingRepository repository, IBankingUnitOf
     public async Task<AccountResponse> GetAsync(Guid id, CancellationToken cancellationToken) =>
         ToResponse(await repository.OwnedAccountAsync(user.Profile.Id, id, cancellationToken) ?? throw Missing());
 
-    public Task<AccountResponse> OpenAsync(CancellationToken cancellationToken) =>
+    public Task<AccountResponse> OpenAsync(CancellationToken cancellationToken, string currency = "UAH") =>
         unitOfWork.ExecuteAsync(user.Profile.Id, Guid.NewGuid(), _ =>
         {
-            var account = BankAccount.Open(user.Profile.Id, clock.UtcNow);
+            var account = BankAccount.Open(user.Profile.Id, clock.UtcNow, currency);
             repository.Add(account);
             return Task.FromResult(ToResponse(account));
         }, cancellationToken);
 
     public static ApplicationFailureException Missing() => new(FailureKind.NotFound, "banking.not_found", "Resource not found.");
-    public static AccountResponse ToResponse(BankAccount account) => new(account.Id, account.Iban!, Money.Currency, account.BalanceMinorUnits / 100m, account.CreatedAt);
+    public static AccountResponse ToResponse(BankAccount account) => new(account.Id, account.Iban!, account.CurrencyCode, account.BalanceMinorUnits / 100m, account.CreatedAt);
 }

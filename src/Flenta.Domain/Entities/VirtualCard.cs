@@ -38,9 +38,14 @@ public sealed class VirtualCard : Entity
     public void Close() => Status = CardStatus.Closed;
     public void MarkSecretsViewed(DateTimeOffset now)
     {
-        if (Status != CardStatus.Active || now >= new DateTimeOffset(ExpiryYear, ExpiryMonth, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1))
-            throw new DomainValidationException("card.unavailable", "Requisites are unavailable for a blocked, closed or expired card.");
+        EnsureUsable(now);
         LastSecretsViewedAt = now;
+    }
+
+    public void EnsureUsable(DateTimeOffset now)
+    {
+        if (Status != CardStatus.Active || now >= new DateTimeOffset(ExpiryYear, ExpiryMonth, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1))
+            throw new DomainValidationException("card.unavailable", "The card is blocked, closed or expired.");
     }
 
     private void EnsureNotClosed()
