@@ -7,6 +7,8 @@ using Flenta.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Flenta.Application.Abstractions.Kyc;
+using Flenta.Tests.Kyc;
 
 namespace Flenta.Tests.Api;
 
@@ -143,6 +145,7 @@ public sealed class AuthenticationTests
     private static WebApplicationFactory<Program> CreateHost(ProviderHandler provider) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
+            services.AddSingleton<IKycAccessPolicy, ApprovedKycPolicy>();
             services.Configure<SupabaseOptions>(options =>
             {
                 options.Enabled = true;

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Flenta.Application.Abstractions;
 using Flenta.Application.Features.Auth;
+using Flenta.Api.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -13,30 +14,30 @@ namespace Flenta.Api.Controllers;
 [RequestSizeLimit(16 * 1024)]
 public sealed class AuthController(AuthenticationService authentication, ICurrentUser currentUser) : ControllerBase
 {
-    [HttpPost("register")]
+    [AllowAnonymous, HttpPost("register")]
     public Task<RegistrationResult> Register(RegisterRequest request, CancellationToken cancellationToken) =>
         authentication.RegisterAsync(request.Email, request.Password, request.DisplayName, request.CodeChallenge, cancellationToken);
 
-    [HttpPost("login")]
+    [AllowAnonymous, HttpPost("login")]
     public Task<AuthSession> Login(LoginRequest request, CancellationToken cancellationToken) =>
         authentication.LoginAsync(request.Email, request.Password, cancellationToken);
 
-    [HttpPost("refresh")]
+    [AllowAnonymous, HttpPost("refresh")]
     public Task<AuthSession> Refresh(RefreshRequest request, CancellationToken cancellationToken) =>
         authentication.RefreshAsync(request.RefreshToken, cancellationToken);
 
-    [HttpPost("exchange")]
+    [AllowAnonymous, HttpPost("exchange")]
     public Task<AuthSession> Exchange(ExchangeRequest request, CancellationToken cancellationToken) =>
         authentication.ExchangeCodeAsync(request.Code, request.CodeVerifier, cancellationToken);
 
-    [HttpPost("recover")]
+    [AllowAnonymous, HttpPost("recover")]
     public async Task<IActionResult> Recover(RecoveryRequest request, CancellationToken cancellationToken)
     {
         await authentication.RecoverAsync(request.Email, request.CodeChallenge, cancellationToken);
         return Accepted(new { message = "If the address is registered, a recovery email will be sent." });
     }
 
-    [Authorize]
+    [Authorize(Policy = KycPolicies.Onboarding)]
     [HttpPut("password")]
     public async Task<IActionResult> ChangePassword(PasswordRequest request, CancellationToken cancellationToken)
     {
@@ -44,7 +45,7 @@ public sealed class AuthController(AuthenticationService authentication, ICurren
         return NoContent();
     }
 
-    [Authorize]
+    [Authorize(Policy = KycPolicies.Onboarding)]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {

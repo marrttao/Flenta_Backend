@@ -4,6 +4,7 @@ using Flenta.Application.Abstractions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flenta.Api.Configuration;
 
@@ -18,7 +19,14 @@ public static class ApiServiceCollectionExtensions
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
         services.AddAuthentication("Supabase")
             .AddScheme<AuthenticationSchemeOptions, SupabaseAuthenticationHandler>("Supabase", _ => { });
-        services.AddAuthorization();
+        services.AddScoped<IAuthorizationHandler, VerifiedKycHandler>();
+        services.AddAuthorization(options =>
+        {
+            var verified = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().AddRequirements(new VerifiedKycRequirement()).Build();
+            options.DefaultPolicy = verified;
+            options.FallbackPolicy = verified;
+            options.AddPolicy(KycPolicies.Onboarding, policy => policy.RequireAuthenticatedUser());
+        });
         var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
         services.AddCors(options => options.AddDefaultPolicy(policy =>
         {
@@ -26,6 +34,9 @@ public static class ApiServiceCollectionExtensions
         }));
         services.AddRateLimiter(options =>
         {
+            options.AddPolicy("kyc", context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
             options.AddPolicy("banking", context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions

@@ -311,6 +311,139 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flenta.Domain.Entities.KycReviewEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PreviousStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("VerificationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "CreatedAt");
+
+                    b.HasIndex("VerificationId", "OwnerId");
+
+                    b.ToTable("review_events", "kyc");
+                });
+
+            modelBuilder.Entity("Flenta.Domain.Entities.KycVerification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("ConfigurationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecisionReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExternalUserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Sumsub");
+
+                    b.Property<string>("ProviderSessionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("Sandbox")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExternalUserId");
+
+                    b.HasIndex("ProviderName", "ProviderSessionId")
+                        .IsUnique();
+
+                    b.HasIndex("OwnerId", "ProviderName", "AttemptNumber")
+                        .IsUnique();
+
+                    b.ToTable("verifications", "kyc", t =>
+                        {
+                            t.HasCheckConstraint("ck_kyc_status", "\"Status\" IN ('NotStarted','InProgress','PendingReview','NeedsResubmission','Rejected','Verified','Expired')");
+
+                            t.HasCheckConstraint("ck_kyc_verified", "(\"Status\" = 'Verified') = (\"VerifiedAt\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Flenta.Domain.Entities.KycWebhookReceipt", b =>
+                {
+                    b.Property<string>("Digest")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Digest");
+
+                    b.HasIndex("OwnerId", "ReceivedAt");
+
+                    b.ToTable("webhook_receipts", "kyc");
+                });
+
             modelBuilder.Entity("Flenta.Domain.Entities.LedgerEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -495,6 +628,16 @@ namespace Flenta.Infrastructure.Persistence.Banking.Migrations
                         .WithMany()
                         .HasForeignKey("TransactionId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Flenta.Domain.Entities.KycReviewEvent", b =>
+                {
+                    b.HasOne("Flenta.Domain.Entities.KycVerification", null)
+                        .WithMany()
+                        .HasForeignKey("VerificationId", "OwnerId")
+                        .HasPrincipalKey("Id", "OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Flenta.Domain.Entities.LedgerEntry", b =>

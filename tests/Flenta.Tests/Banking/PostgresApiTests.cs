@@ -16,6 +16,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
+using Flenta.Application.Abstractions.Kyc;
+using Flenta.Tests.Kyc;
 
 namespace Flenta.Tests.Banking;
 
@@ -66,6 +68,7 @@ public sealed partial class PostgresApiTests : IAsyncLifetime
 
     private WebApplicationFactory<Program> Host() => new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
     {
+        services.AddSingleton<IKycAccessPolicy, ApprovedKycPolicy>();
         services.Configure<BankingOptions>(options =>
         {
             options.Enabled = true;

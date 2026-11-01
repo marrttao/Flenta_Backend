@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Flenta.Application.Abstractions.Kyc;
+using Flenta.Tests.Kyc;
 
 namespace Flenta.Tests.Banking;
 
@@ -31,6 +33,7 @@ public sealed class AvailabilityTests
     {
         using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
+            services.AddSingleton<IKycAccessPolicy, ApprovedKycPolicy>();
             services.RemoveAll<IUserProfileRepository>();
             services.AddSingleton<IUserProfileRepository, TestProfiles>();
         }));

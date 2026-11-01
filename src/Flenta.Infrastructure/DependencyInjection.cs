@@ -10,6 +10,8 @@ using Flenta.Domain.ValueObjects;
 using Flenta.Infrastructure.Persistence.Banking;
 using Flenta.Infrastructure.Security;
 using Flenta.Infrastructure.Exchange;
+using Flenta.Infrastructure.Kyc;
+using Flenta.Application.Abstractions.Kyc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -31,6 +33,16 @@ public static class DependencyInjection
             .RemoveAllLoggers();
         services.AddScoped<IIdentityProvider, SupabaseIdentityProvider>();
         services.AddScoped<IUserProfileRepository, SupabaseUserProfileRepository>();
+        services.AddOptions<DiditOptions>().BindConfiguration("Didit")
+            .Validate(options => !options.Enabled || options.Configured, "Enabled Didit requires an API key, webhook secret and Workflow ID.")
+            .ValidateOnStart();
+        services.AddHttpClient<IKycProvider, DiditClient>(client => client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers();
+        services.AddSingleton<IKycWebhookAuthenticator, DiditWebhookAuthenticator>();
+        services.AddScoped<PostgresKycRepository>();
+        services.AddScoped<IKycRepository>(provider => provider.GetRequiredService<PostgresKycRepository>());
+        services.AddScoped<IKycUnitOfWork>(provider => provider.GetRequiredService<PostgresKycRepository>());
         services.AddOptions<BankingOptions>().BindConfiguration("Banking")
             .Validate(options => options.IbanFeeRate is >= 0 and <= 1
                 && options.MinimumIbanFeeMinorUnits is >= 0 and <= Money.MaximumMinorUnits,

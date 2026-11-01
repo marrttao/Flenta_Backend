@@ -94,6 +94,7 @@ public sealed class ApiTests(WebApplicationFactory<Program> factory)
 
 // Loaded only into the test host, never into the production API.
 [ApiController]
+[Microsoft.AspNetCore.Authorization.AllowAnonymous]
 [Route("_tests/failures")]
 public sealed class FailureController : ControllerBase
 {

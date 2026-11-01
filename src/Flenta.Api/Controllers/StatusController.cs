@@ -1,9 +1,11 @@
 using Flenta.Application.Abstractions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Flenta.Api.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/status")]
 public sealed class StatusController(IClock clock) : ControllerBase
 {

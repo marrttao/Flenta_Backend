@@ -5,6 +5,8 @@ using Flenta.Application.Features.Accounts;
 using Flenta.Application.Features.Cards;
 using Flenta.Application.Features.Transactions;
 using Flenta.Application.Features.Finance;
+using Flenta.Application.Features.Kyc;
+using Flenta.Application.Abstractions.Kyc;
 
 namespace Flenta.Application;
 
@@ -21,6 +23,8 @@ public static class DependencyInjection
         services.AddScoped<PurchaseService>();
         services.AddScoped<ExchangeService>();
         services.AddScoped<AnalyticsService>();
+        services.AddScoped<KycService>();
+        services.AddScoped<IKycAccessPolicy, KycAccessPolicy>();
         return services;
     }
 }

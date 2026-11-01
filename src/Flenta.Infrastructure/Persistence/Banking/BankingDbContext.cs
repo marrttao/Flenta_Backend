@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flenta.Infrastructure.Persistence.Banking;
 
-public sealed class BankingDbContext(DbContextOptions<BankingDbContext> options) : DbContext(options)
+public sealed partial class BankingDbContext(DbContextOptions<BankingDbContext> options) : DbContext(options)
 {
     public DbSet<BankAccount> Accounts => Set<BankAccount>();
     public DbSet<VirtualCard> Cards => Set<VirtualCard>();
@@ -17,6 +17,7 @@ public sealed class BankingDbContext(DbContextOptions<BankingDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder model)
     {
+        ConfigureKyc(model);
         model.HasDefaultSchema("banking");
         var account = model.Entity<BankAccount>();
         account.ToTable("accounts", table =>
