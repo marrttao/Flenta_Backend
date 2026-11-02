@@ -16,6 +16,7 @@ public sealed class NbuExchangeRateProvider(HttpClient client, IClock clock) : I
         {
             var rows = await client.GetFromJsonAsync<NbuRate[]>("https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json", cancellationToken)
                 ?? throw new JsonException();
+            if (rows.Any(row => row is null)) throw new JsonException();
             var usd = rows.Single(row => row.Code == "USD");
             var eur = rows.Single(row => row.Code == "EUR");
             var date = DateOnly.ParseExact(usd.Date, "dd.MM.yyyy", CultureInfo.InvariantCulture);
@@ -24,7 +25,7 @@ public sealed class NbuExchangeRateProvider(HttpClient client, IClock clock) : I
                 throw new JsonException();
             return new CurrencyRates(date, "NBU", new Dictionary<string, decimal> { ["UAH"] = 1m, ["USD"] = usd.Rate, ["EUR"] = eur.Rate });
         }
-        catch (Exception exception) when (exception is HttpRequestException or JsonException or FormatException or InvalidOperationException or ArgumentException
+        catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException or FormatException or InvalidOperationException or ArgumentException
             || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             throw new ApplicationFailureException(FailureKind.Unavailable, "exchange.rates_unavailable", "NBU exchange rates are unavailable. Try again later.");

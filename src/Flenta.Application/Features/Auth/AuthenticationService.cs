@@ -79,9 +79,9 @@ public sealed partial class AuthenticationService(IIdentityProvider identityProv
         }
     }
 
-    [GeneratedRegex("^[A-Za-z0-9_-]{43}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A[A-Za-z0-9_-]{43}\z", RegexOptions.CultureInvariant)]
     private static partial Regex ChallengePattern();
 
-    [GeneratedRegex("^[A-Za-z0-9._~-]{43,128}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A[A-Za-z0-9._~-]{43,128}\z", RegexOptions.CultureInvariant)]
     private static partial Regex VerifierPattern();
 }
