@@ -1,13 +1,30 @@
 using Microsoft.Extensions.DependencyInjection;
+using Flenta.Application.Features.Auth;
+using Flenta.Application.Features.Profile;
+using Flenta.Application.Features.Accounts;
+using Flenta.Application.Features.Cards;
+using Flenta.Application.Features.Transactions;
+using Flenta.Application.Features.Finance;
+using Flenta.Application.Features.Kyc;
+using Flenta.Application.Abstractions.Kyc;
 
 namespace Flenta.Application;
 
 public static class DependencyInjection
 {
-    /// <summary>Composition entry point for use cases as features are implemented.</summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // No registration or authentication use cases are implemented in the architecture stage.
+        services.AddScoped<AuthenticationService>();
+        services.AddScoped<ProfileService>();
+        services.AddScoped<AccountService>();
+        services.AddScoped<CardService>();
+        services.AddScoped<TransactionService>();
+        services.AddScoped<SavingsService>();
+        services.AddScoped<PurchaseService>();
+        services.AddScoped<ExchangeService>();
+        services.AddScoped<AnalyticsService>();
+        services.AddScoped<KycService>();
+        services.AddScoped<IKycAccessPolicy, KycAccessPolicy>();
         return services;
     }
 }
