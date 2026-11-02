@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Flenta.Application.Abstractions.Kyc;
 using Flenta.Application.Features.Auth;
 using Flenta.Domain.Entities;
@@ -63,7 +64,7 @@ public sealed class DiditClient(HttpClient client, IOptions<DiditOptions> option
         if (value is null) return null;
         if (value.Length > 4096 || !Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != "https"
             || uri.IdnHost != "verify.didit.me" || !uri.IsDefaultPort || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0
-            || !uri.AbsolutePath.StartsWith("/session/", StringComparison.Ordinal) || uri.AbsolutePath.Length <= 9) throw Unavailable();
+            || !Regex.IsMatch(uri.AbsolutePath, @"\A/(?:[a-z]{2}(?:-[A-Za-z]{2})?/)?session/[A-Za-z0-9_-]+\z", RegexOptions.CultureInvariant)) throw Unavailable();
         return uri.AbsoluteUri;
     }
 
