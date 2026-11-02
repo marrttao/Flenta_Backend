@@ -155,11 +155,94 @@ public sealed class AuthenticationTests
             services.AddHttpClient("SupabaseAuthClient").ConfigurePrimaryHttpMessageHandler(() => provider);
         }));
 
+    [Fact]
+    public async Task PKCE_verifiers_with_a_trailing_newline_are_rejected_before_contacting_the_provider()
+    {
+        var provider = new ProviderHandler();
+        using var host = CreateHost(provider);
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/exchange",
+            new { code = "one-time-code", codeVerifier = new string('b', 43) + "\n" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(provider.Requests);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("42")]
+    [InlineData("{\"access_token\":42}")]
+    [InlineData("{\"access_token\":\"a\",\"refresh_token\":false}")]
+    [InlineData("{\"access_token\":\"a\",\"refresh_token\":\"r\",\"expires_in\":\"3600\",\"user\":{}}")]
+    [InlineData("{\"access_token\":\"a\",\"refresh_token\":\"r\",\"expires_in\":3600,\"user\":[]}")]
+    [InlineData("{\"access_token\":\"a\",\"refresh_token\":\"r\",\"expires_in\":3600,\"user\":{\"id\":42}}")]
+    public async Task Malformed_provider_sessions_return_a_safe_503(string body)
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseBody = body });
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/login",
+            new { email = "test@example.com", password = "a-valid-long-password" });
+        await AssertProviderUnavailable(response);
+    }
+
+    [Theory]
+    [InlineData("{\"id\":\"61b067c6-20e4-48bb-bfa6-bbecedbaeb99\",\"email\":42}")]
+    [InlineData("{\"id\":\"61b067c6-20e4-48bb-bfa6-bbecedbaeb99\",\"email\":\"invalid-address\"}")]
+    [InlineData("{\"id\":\"61b067c6-20e4-48bb-bfa6-bbecedbaeb99\",\"email\":\"test@example.com\",\"user_metadata\":{\"display_name\":\"bad\\nname\"}}")]
+    public async Task Malformed_provider_profiles_are_not_reported_as_client_validation_errors(string body)
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseBody = body });
+        using var client = host.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "access-fixture");
+        using var response = await client.GetAsync("/api/profile");
+        await AssertProviderUnavailable(response);
+    }
+
+    [Theory]
+    [InlineData("[]", HttpStatusCode.Unauthorized)]
+    [InlineData("null", HttpStatusCode.Forbidden)]
+    [InlineData("{\"error_code\":42}", HttpStatusCode.TooManyRequests)]
+    [InlineData("not-json", HttpStatusCode.ServiceUnavailable)]
+    public async Task Malformed_provider_errors_preserve_the_HTTP_status_mapping(string body, HttpStatusCode status)
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseBody = body, ResponseStatus = status });
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/login",
+            new { email = "test@example.com", password = "a-valid-long-password" });
+        Assert.Equal(status, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Empty_signup_response_is_not_reported_as_successful_registration()
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseBody = "" });
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email = "test@example.com", password = "a-valid-long-password",
+            displayName = "Test", codeChallenge = new string('a', 43)
+        });
+        await AssertProviderUnavailable(response);
+    }
+
+    private static async Task AssertProviderUnavailable(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("auth.provider_unavailable", document.RootElement.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("traceId").GetString()));
+    }
+
     private sealed class ProviderHandler : HttpMessageHandler
     {
         public static readonly Guid UserId = Guid.Parse("61b067c6-20e4-48bb-bfa6-bbecedbaeb99");
         public List<(string Path, string Body, string? Token)> Requests { get; } = [];
         public bool Offline { get; init; }
+        public string? ResponseBody { get; init; }
+        public HttpStatusCode ResponseStatus { get; init; } = HttpStatusCode.OK;
         private string displayName = "Test";
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -169,6 +252,10 @@ public sealed class AuthenticationTests
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             Requests.Add((path, body, request.Headers.Authorization?.Parameter));
             Assert.Equal("sb_publishable_test_fixture", Assert.Single(request.Headers.GetValues("apikey")));
+            if (ResponseBody is not null) return new HttpResponseMessage(ResponseStatus)
+            {
+                Content = new StringContent(ResponseBody, System.Text.Encoding.UTF8, "application/json")
+            };
             if (request.Headers.Authorization?.Parameter == "forged-token") return Json(HttpStatusCode.Unauthorized, new { error_code = "bad_jwt" });
             if (path.Contains("token?", StringComparison.Ordinal)) return Json(HttpStatusCode.OK, new
             {

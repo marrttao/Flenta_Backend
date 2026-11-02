@@ -16,13 +16,16 @@ public sealed class DiditClientTests
     internal static DiditOptions Settings() => new()
     { Enabled = true, Sandbox = true, ApiKey = "api-fixture", WebhookSecret = "hook-fixture", WorkflowId = KycTestProvider.WorkflowId };
 
-    [Fact]
-    public async Task Session_is_created_for_the_server_user_and_read_back_before_returning_its_url()
+    [Theory]
+    [InlineData("https://verify.didit.me/session/fixture")]
+    [InlineData("https://verify.didit.me/uk/session/fixture")]
+    [InlineData("https://verify.didit.me/pt-BR/session/fixture")]
+    public async Task Session_is_created_for_the_server_user_and_read_back_before_returning_its_url(string url)
     {
-        var settings = Settings(); using var handler = new Handler(); using var http = new HttpClient(handler);
+        var settings = Settings(); using var handler = new Handler { SessionUrl = url }; using var http = new HttpClient(handler);
         var result = await new DiditClient(http, Options.Create(settings)).CreateSessionAsync(KycVerification.ExternalId(KycProfiles.Alice), default);
         Assert.Equal(KycTestProvider.SessionId, result.SessionId);
-        Assert.StartsWith("https://verify.didit.me/session/", result.VerificationUrl);
+        Assert.Equal(url, result.VerificationUrl);
         var creation = Assert.Single(handler.Requests, r => r.Method == HttpMethod.Post);
         Assert.Equal("/v3/session/", creation.Path);
         using var body = JsonDocument.Parse(creation.Body);
@@ -98,6 +101,10 @@ public sealed class DiditClientTests
     [InlineData("https://verify.didit.me:8443/session/token")]
     [InlineData("https://verify.didit.me/u/unbound-workflow")]
     [InlineData("https://verify.didit.me/session/token#unexpected")]
+    [InlineData("https://verify.didit.me/uk/session/")]
+    [InlineData("https://verify.didit.me/uk/session/token/extra")]
+    [InlineData("https://verify.didit.me/uk/session/token%2Fextra")]
+    [InlineData("https://verify.didit.me.attacker.invalid/uk/session/token")]
     public void Verification_URL_must_be_an_owned_provider_session_link(string url) =>
         Assert.Throws<ApplicationFailureException>(() => DiditClient.VerificationUrl(url));
 
@@ -126,6 +133,7 @@ public sealed class DiditClientTests
     {
         public List<(HttpMethod Method, string Path, byte[] Body)> Requests { get; } = [];
         public string Status { get; init; } = "Approved";
+        public string SessionUrl { get; init; } = "https://verify.didit.me/session/fixture";
         public string Country { get; init; } = "UKR";
         public string DocumentType { get; init; } = "ID_CARD";
         public string Liveness { get; init; } = "Approved";
@@ -146,13 +154,13 @@ public sealed class DiditClientTests
                 ["workflow_id"] = Changed == "workflow" ? Guid.NewGuid().ToString("D") : KycTestProvider.WorkflowId,
                 ["vendor_data"] = KycVerification.ExternalId(Changed == "vendor" ? KycProfiles.Bob : KycProfiles.Alice),
                 ["environment"] = Changed == "environment" ? "live" : "sandbox", ["status"] = Status,
-                ["session_url"] = "https://verify.didit.me/session/fixture",
+                ["session_url"] = SessionUrl,
                 ["id_verifications"] = new[] { new { status = "Approved", issuing_state = Country, document_type = DocumentType } },
                 ["liveness_checks"] = new[] { new { status = Liveness, method = Method } },
                 ["face_matches"] = new[] { new { status = Face } }
             };
             if (Missing is not null) decision.Remove(Missing);
-            object payload = request.Method == HttpMethod.Post ? new { session_id = KycTestProvider.SessionId, url = "https://verify.didit.me/session/fixture" } : decision;
+            object payload = request.Method == HttpMethod.Post ? new { session_id = KycTestProvider.SessionId, url = SessionUrl } : decision;
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(payload) };
         }
     }
