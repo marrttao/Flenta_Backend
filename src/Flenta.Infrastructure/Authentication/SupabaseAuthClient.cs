@@ -12,7 +12,13 @@ namespace Flenta.Infrastructure.Authentication;
 
 internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOptions> options)
 {
-    public string RedirectTo(string path) => options.Value.FrontendUrl.TrimEnd('/') + path;
+    public string RedirectTo(string path, AuthClient authClient)
+    {
+        if (authClient == AuthClient.Desktop) return options.Value.FrontendUrl.TrimEnd('/') + path;
+        if (string.IsNullOrWhiteSpace(options.Value.MobileFrontendUrl))
+            throw new ApplicationFailureException(FailureKind.Unavailable, "auth.mobile_not_configured", "Mobile email callbacks are not configured.");
+        return options.Value.MobileFrontendUrl.TrimEnd('/') + "/" + path.TrimStart('/');
+    }
 
     public async Task<JsonElement> SendAsync(HttpMethod method, string path, object? body, string? token, CancellationToken cancellationToken)
     {

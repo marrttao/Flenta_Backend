@@ -32,4 +32,13 @@ public sealed class SupabaseConfigurationTests
         var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { role }))).TrimEnd('=');
         return "header." + payload + ".signature";
     }
+
+    [Theory]
+    [InlineData("flenta-mobile://app", true)]
+    [InlineData("flenta-mobile://evil", false)]
+    [InlineData("flenta-mobile://app?next=https://bad.test", false)]
+    [InlineData("https://bad.test", false)]
+    [InlineData("javascript:alert(1)", false)]
+    public void Mobile_callbacks_use_only_the_registered_application(string url, bool expected) =>
+        Assert.Equal(expected, SupabaseOptions.IsSafeMobileUrl(url));
 }

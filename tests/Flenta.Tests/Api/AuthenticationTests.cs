@@ -81,6 +81,57 @@ public sealed class AuthenticationTests
         Assert.Contains(provider.Requests, r => r.Path.EndsWith("logout?scope=local", StringComparison.Ordinal) && r.Token == "access-fixture");
     }
 
+    [Theory]
+    [InlineData("register", "desktop", "http://127.0.0.1:5173/auth/confirm-email")]
+    [InlineData("register", "mobile", "flenta-mobile://app/auth/confirm-email")]
+    [InlineData("recover", "desktop", "http://127.0.0.1:5173/auth/reset-password")]
+    [InlineData("recover", "mobile", "flenta-mobile://app/auth/reset-password")]
+    public async Task Email_redirects_are_selected_by_client_without_changing_desktop_behavior(string endpoint, string authClient, string expected)
+    {
+        var provider = new ProviderHandler();
+        using var host = CreateHost(provider, mobileConfigured: true);
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/" + endpoint, new
+        {
+            email = "test@example.com", password = "a-valid-long-password", displayName = "Test",
+            codeChallenge = new string('a', 43), client = authClient
+        });
+        response.EnsureSuccessStatusCode();
+        Assert.EndsWith("redirect_to=" + Uri.EscapeDataString(expected), Assert.Single(provider.Requests).Path);
+    }
+
+    [Theory]
+    [InlineData("register")]
+    [InlineData("recover")]
+    public async Task Unknown_clients_cannot_choose_redirects(string endpoint)
+    {
+        var provider = new ProviderHandler();
+        using var host = CreateHost(provider, mobileConfigured: true);
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/" + endpoint, new
+        {
+            email = "test@example.com", password = "a-valid-long-password", displayName = "Test",
+            codeChallenge = new string('a', 43), client = "https://bad.test"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("auth.invalid_client", await response.Content.ReadAsStringAsync());
+        Assert.Empty(provider.Requests);
+    }
+
+    [Fact]
+    public async Task Mobile_callback_is_opt_in_and_does_not_silently_fall_back_to_desktop()
+    {
+        var provider = new ProviderHandler();
+        using var host = CreateHost(provider);
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/recover", new
+        {
+            email = "test@example.com", codeChallenge = new string('a', 43), client = "mobile"
+        });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Empty(provider.Requests);
+    }
+
     [Fact]
     public async Task Refresh_and_PKCE_exchange_forward_the_expected_grants()
     {
@@ -142,7 +193,7 @@ public sealed class AuthenticationTests
         Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
     }
 
-    private static WebApplicationFactory<Program> CreateHost(ProviderHandler provider) =>
+    private static WebApplicationFactory<Program> CreateHost(ProviderHandler provider, bool mobileConfigured = false) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.AddSingleton<IKycAccessPolicy, ApprovedKycPolicy>();
@@ -151,6 +202,7 @@ public sealed class AuthenticationTests
                 options.Enabled = true;
                 options.Url = "http://127.0.0.1:9999";
                 options.PublishableKey = "sb_publishable_test_fixture";
+                options.MobileFrontendUrl = mobileConfigured ? "flenta-mobile://app" : "";
             });
             services.AddHttpClient("SupabaseAuthClient").ConfigurePrimaryHttpMessageHandler(() => provider);
         }));

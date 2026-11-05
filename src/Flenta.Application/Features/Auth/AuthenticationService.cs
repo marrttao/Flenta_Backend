@@ -8,13 +8,13 @@ namespace Flenta.Application.Features.Auth;
 
 public sealed partial class AuthenticationService(IIdentityProvider identityProvider)
 {
-    public Task<RegistrationResult> RegisterAsync(string email, string password, string displayName, string codeChallenge, CancellationToken cancellationToken)
+    public Task<RegistrationResult> RegisterAsync(string email, string password, string displayName, string codeChallenge, CancellationToken cancellationToken, string client = "desktop")
     {
         var address = EmailAddress.Create(email);
         ValidatePassword(password);
         var name = UserProfile.NormalizeDisplayName(displayName);
         ValidateChallenge(codeChallenge);
-        return identityProvider.RegisterAsync(address.Value, password, name, codeChallenge, cancellationToken);
+        return identityProvider.RegisterAsync(address.Value, password, name, codeChallenge, cancellationToken, ParseClient(client));
     }
 
     public Task<AuthSession> LoginAsync(string email, string password, CancellationToken cancellationToken)
@@ -40,11 +40,11 @@ public sealed partial class AuthenticationService(IIdentityProvider identityProv
         return identityProvider.ExchangeCodeAsync(code, codeVerifier, cancellationToken);
     }
 
-    public Task RecoverAsync(string email, string codeChallenge, CancellationToken cancellationToken)
+    public Task RecoverAsync(string email, string codeChallenge, CancellationToken cancellationToken, string client = "desktop")
     {
         var address = EmailAddress.Create(email);
         ValidateChallenge(codeChallenge);
-        return identityProvider.SendRecoveryEmailAsync(address.Value, codeChallenge, cancellationToken);
+        return identityProvider.SendRecoveryEmailAsync(address.Value, codeChallenge, cancellationToken, ParseClient(client));
     }
 
     public Task ChangePasswordAsync(string accessToken, string newPassword, CancellationToken cancellationToken)
@@ -54,6 +54,13 @@ public sealed partial class AuthenticationService(IIdentityProvider identityProv
     }
 
     public Task LogoutAsync(string accessToken, CancellationToken cancellationToken) => identityProvider.LogoutAsync(accessToken, cancellationToken);
+
+    private static AuthClient ParseClient(string client) => client switch
+    {
+        "desktop" => AuthClient.Desktop,
+        "mobile" => AuthClient.Mobile,
+        _ => throw new DomainValidationException("auth.invalid_client", "Use desktop or mobile as the authentication client.")
+    };
 
     private static void ValidatePassword(string? password)
     {

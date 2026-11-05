@@ -9,6 +9,10 @@ public sealed class SupabaseOptions
     public string Url { get; set; } = string.Empty;
     public string PublishableKey { get; set; } = string.Empty;
     public string FrontendUrl { get; set; } = "http://127.0.0.1:5173";
+    // Opt-in: existing desktop deployments do not require a mobile callback.
+    public string MobileFrontendUrl { get; set; } = string.Empty;
+
+    public static bool IsSafeMobileUrl(string value) => value == "flenta-mobile://app";
 
     public static bool IsSafeUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback)

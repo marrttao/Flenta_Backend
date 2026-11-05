@@ -314,9 +314,9 @@ internal sealed class TestIdentity : IIdentityProvider
         return Task.FromResult(new AuthSession("temporary-stepup", "temporary-refresh", 3600, new ProfileResponse(id, email, "Test", true)));
     }
     public Task LogoutAsync(string accessToken, CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task<RegistrationResult> RegisterAsync(string email, string password, string displayName, string codeChallenge, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<RegistrationResult> RegisterAsync(string email, string password, string displayName, string codeChallenge, CancellationToken cancellationToken, AuthClient client = AuthClient.Desktop) => throw new NotSupportedException();
     public Task<AuthSession> RefreshAsync(string refreshToken, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<AuthSession> ExchangeCodeAsync(string code, string codeVerifier, CancellationToken cancellationToken) => throw new NotSupportedException();
-    public Task SendRecoveryEmailAsync(string email, string codeChallenge, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task SendRecoveryEmailAsync(string email, string codeChallenge, CancellationToken cancellationToken, AuthClient client = AuthClient.Desktop) => throw new NotSupportedException();
     public Task ChangePasswordAsync(string accessToken, string newPassword, CancellationToken cancellationToken) => throw new NotSupportedException();
 }

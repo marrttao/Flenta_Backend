@@ -29,6 +29,9 @@ public static class DependencyInjection
                 && SupabaseOptions.IsPublicKey(options.PublishableKey),
                 "Configure safe Supabase and frontend URLs and a public publishable/anon key.")
             .ValidateOnStart();
+        services.AddOptions<SupabaseOptions>()
+            .Validate(options => string.IsNullOrEmpty(options.MobileFrontendUrl) || SupabaseOptions.IsSafeMobileUrl(options.MobileFrontendUrl),
+                "MobileFrontendUrl must be empty or flenta-mobile://app.");
         services.AddHttpClient<SupabaseAuthClient>(client => client.Timeout = TimeSpan.FromSeconds(15))
             .RemoveAllLoggers();
         services.AddScoped<IIdentityProvider, SupabaseIdentityProvider>();
