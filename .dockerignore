@@ -1,0 +1,15 @@
+**/bin
+**/obj
+.git
+.gitignore
+.vs
+.idea
+**/*.user
+.env
+.env.*
+!.env.example
+**/appsettings.Development.json
+tests
+README.md
+Dockerfile
+.dockerignore
