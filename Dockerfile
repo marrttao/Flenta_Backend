@@ -1,20 +1,24 @@
-FROM node:22-alpine AS build
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
 
 COPY . .
-ARG VITE_CURRENCY_SPREAD=0.005
-ENV VITE_CURRENCY_SPREAD=$VITE_CURRENCY_SPREAD
-ARG VITE_API_BASE_URL=http://localhost:5080
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN dotnet restore src/Flenta.Api/Flenta.Api.csproj
+RUN dotnet publish src/Flenta.Api/Flenta.Api.csproj -c Release -o /app/publish --no-restore
 
-RUN npm run build
 
-FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+FROM build AS migrate
+ENV PATH="$PATH:/root/.dotnet/tools"
+RUN dotnet tool install --global dotnet-ef --version "10.*"
+ENTRYPOINT ["dotnet", "ef", "database", "update", "--project", "src/Flenta.Infrastructure"]
 
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+
+USER app
+
+ENTRYPOINT ["dotnet", "Flenta.Api.dll"]
