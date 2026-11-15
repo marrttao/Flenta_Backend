@@ -43,6 +43,37 @@ public sealed class NbuRateTests
         Assert.Equal("exchange.rates_unavailable", failure.Code);
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[null]")]
+    [InlineData("[null,{\"cc\":\"USD\",\"rate\":40,\"exchangedate\":\"01.11.2026\"},{\"cc\":\"EUR\",\"rate\":45,\"exchangedate\":\"01.11.2026\"}]")]
+    [InlineData("[{\"cc\":\"USD\",\"rate\":40,\"exchangedate\":null},{\"cc\":\"EUR\",\"rate\":45,\"exchangedate\":null}]")]
+    [InlineData("[]")]
+    public async Task Malformed_rate_snapshots_are_reported_as_unavailable(string content)
+    {
+        using var handler = new RawHandler(content);
+        using var client = new HttpClient(handler);
+        var failure = await Assert.ThrowsAsync<ApplicationFailureException>(() => new NbuExchangeRateProvider(client, new TestClock { UtcNow = Now }).GetAsync(default));
+        Assert.Equal(FailureKind.Unavailable, failure.Kind);
+        Assert.Equal("exchange.rates_unavailable", failure.Code);
+    }
+
+    [Fact]
+    public async Task Interrupted_rate_response_is_reported_as_unavailable()
+    {
+        using var handler = new RawHandler(null);
+        using var client = new HttpClient(handler);
+        var failure = await Assert.ThrowsAsync<ApplicationFailureException>(() => new NbuExchangeRateProvider(client, new TestClock { UtcNow = Now }).GetAsync(default));
+        Assert.Equal("exchange.rates_unavailable", failure.Code);
+    }
+
+    private sealed class RawHandler(string? content) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            content is null ? throw new IOException("private-transport-error")
+                : Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) });
+    }
+
     private sealed class Handler(HttpStatusCode status, string usdDate, string eurDate, decimal usd, decimal eur) : HttpMessageHandler
     {
         public HttpRequestMessage? Request { get; private set; }

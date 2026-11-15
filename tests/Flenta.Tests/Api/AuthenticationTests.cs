@@ -128,6 +128,64 @@ public sealed class AuthenticationTests
         Assert.DoesNotContain("private-provider-error", await response.Content.ReadAsStringAsync());
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    [InlineData("{\"access_token\":123}")]
+    [InlineData("{\"access_token\":\"access\",\"refresh_token\":false}")]
+    [InlineData("{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":\"3600\"}")]
+    [InlineData("{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600,\"user\":null}")]
+    public async Task Malformed_provider_sessions_are_reported_as_unavailable(string content)
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseContent = content });
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/login", new { email = "test@example.com", password = "a-valid-long-password" });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("auth.provider_unavailable", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{\"id\":123,\"email\":\"test@example.com\"}")]
+    [InlineData("{\"id\":\"61b067c6-20e4-48bb-bfa6-bbecedbaeb99\",\"email\":123}")]
+    [InlineData("{\"id\":\"61b067c6-20e4-48bb-bfa6-bbecedbaeb99\",\"email\":\"invalid-email\"}")]
+    [InlineData("{\"id\":\"61b067c6-20e4-48bb-bfa6-bbecedbaeb99\",\"email\":\"test@example.com\",\"user_metadata\":{\"display_name\":\"invalid\\nname\"}}")]
+    public async Task Malformed_provider_profiles_are_not_reported_as_client_input_errors(string content)
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseContent = content });
+        using var client = host.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "access-fixture");
+        using var response = await client.GetAsync("/api/profile");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("auth.provider_unavailable", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{\"error_code\":123}")]
+    public async Task Malformed_provider_errors_preserve_the_http_failure_category(string content)
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseContent = content, ResponseStatus = HttpStatusCode.TooManyRequests });
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = "refresh-fixture" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.Contains("auth.rate_limited", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("null")]
+    [InlineData("{}")]
+    public async Task Malformed_signup_responses_cannot_report_a_successful_registration(string content)
+    {
+        using var host = CreateHost(new ProviderHandler { ResponseContent = content });
+        using var client = host.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/auth/register", new { email = "test@example.com", password = "a-valid-long-password", displayName = "Test", codeChallenge = new string('a', 43) });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
     [Fact]
     public async Task Authentication_attempts_are_rate_limited()
     {
@@ -160,6 +218,8 @@ public sealed class AuthenticationTests
         public static readonly Guid UserId = Guid.Parse("61b067c6-20e4-48bb-bfa6-bbecedbaeb99");
         public List<(string Path, string Body, string? Token)> Requests { get; } = [];
         public bool Offline { get; init; }
+        public string? ResponseContent { get; init; }
+        public HttpStatusCode ResponseStatus { get; init; } = HttpStatusCode.OK;
         private string displayName = "Test";
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -169,6 +229,7 @@ public sealed class AuthenticationTests
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             Requests.Add((path, body, request.Headers.Authorization?.Parameter));
             Assert.Equal("sb_publishable_test_fixture", Assert.Single(request.Headers.GetValues("apikey")));
+            if (ResponseContent is not null) return new HttpResponseMessage(ResponseStatus) { Content = new StringContent(ResponseContent) };
             if (request.Headers.Authorization?.Parameter == "forged-token") return Json(HttpStatusCode.Unauthorized, new { error_code = "bad_jwt" });
             if (path.Contains("token?", StringComparison.Ordinal)) return Json(HttpStatusCode.OK, new
             {

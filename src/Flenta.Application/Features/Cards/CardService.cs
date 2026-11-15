@@ -50,7 +50,16 @@ public sealed class CardService(IBankingRepository repository, IBankingUnitOfWor
         _ = await repository.OwnedCardAsync(user.Profile.Id, id, false, cancellationToken) ?? throw AccountService.Missing();
         if (string.IsNullOrEmpty(password) || password.Length > 128)
             throw new DomainValidationException("auth.password_required", "Confirm your password to view requisites.");
-        var confirmation = await identityProvider.LoginAsync(user.Profile.Email.Value, password, cancellationToken);
+        AuthSession confirmation;
+        try
+        {
+            confirmation = await identityProvider.LoginAsync(user.Profile.Email.Value, password, cancellationToken);
+        }
+        catch (ApplicationFailureException exception) when (exception.Kind == FailureKind.Unauthorized)
+        {
+            // A failed password confirmation does not invalidate the caller's authenticated session.
+            throw new ApplicationFailureException(FailureKind.Forbidden, "card.confirmation_failed", "Password confirmation failed.");
+        }
         // This temporary login must not leave an additional refresh session behind.
         await identityProvider.LogoutAsync(confirmation.AccessToken, cancellationToken);
         if (confirmation.User.Id != user.Profile.Id)
