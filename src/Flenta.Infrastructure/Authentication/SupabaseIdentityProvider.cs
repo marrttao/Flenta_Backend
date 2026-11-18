@@ -9,6 +9,7 @@ internal sealed class SupabaseIdentityProvider(SupabaseAuthClient client) : IIde
     {
         var result = await client.SendAsync(HttpMethod.Post, "signup?redirect_to=" + Uri.EscapeDataString(client.RedirectTo("/auth/confirm-email")),
             new { email, password, data = new { display_name = displayName }, code_challenge = codeChallenge, code_challenge_method = "s256" }, null, cancellationToken);
+        if (result.ValueKind != System.Text.Json.JsonValueKind.Object) throw SupabaseAuthClient.Unavailable();
         if (result.TryGetProperty("access_token", out var token) && token.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrEmpty(token.GetString()))
             return new RegistrationResult(false, SupabaseAuthClient.ReadSession(result));
         return new RegistrationResult(true, null);

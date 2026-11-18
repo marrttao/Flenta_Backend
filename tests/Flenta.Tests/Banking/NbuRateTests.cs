@@ -55,4 +55,56 @@ public sealed class NbuRateTests
             }) });
         }
     }
+
+    [Theory]
+    [InlineData("[null]")]
+    [InlineData("[null,{\"cc\":\"USD\",\"rate\":40,\"exchangedate\":\"01.11.2026\"},{\"cc\":\"EUR\",\"rate\":45,\"exchangedate\":\"01.11.2026\"}]")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    [InlineData("not-json")]
+    [InlineData("[{\"cc\":\"USD\",\"rate\":40,\"exchangedate\":\"01.11.2026\"},{\"cc\":\"USD\",\"rate\":41,\"exchangedate\":\"01.11.2026\"}]")]
+    public async Task Malformed_upstream_data_returns_a_controlled_unavailable_error(string body)
+    {
+        using var handler = new RawHandler(body);
+        using var client = new HttpClient(handler);
+        var failure = await Assert.ThrowsAsync<ApplicationFailureException>(() =>
+            new NbuExchangeRateProvider(client, new TestClock { UtcNow = Now }).GetAsync(default));
+        Assert.Equal(FailureKind.Unavailable, failure.Kind);
+        Assert.Equal("exchange.rates_unavailable", failure.Code);
+    }
+
+    [Fact]
+    public async Task Transport_IO_failures_do_not_escape_as_internal_server_errors()
+    {
+        using var handler = new RawHandler(null);
+        using var client = new HttpClient(handler);
+        var failure = await Assert.ThrowsAsync<ApplicationFailureException>(() =>
+            new NbuExchangeRateProvider(client, new TestClock { UtcNow = Now }).GetAsync(default));
+        Assert.Equal("exchange.rates_unavailable", failure.Code);
+        Assert.DoesNotContain("private-transport-error", failure.Message);
+    }
+
+    [Fact]
+    public async Task Caller_cancellation_is_preserved()
+    {
+        using var handler = new RawHandler("[]");
+        using var client = new HttpClient(handler);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new NbuExchangeRateProvider(client, new TestClock { UtcNow = Now }).GetAsync(cancellation.Token));
+    }
+
+    private sealed class RawHandler(string? body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (body is null) throw new IOException("private-transport-error");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+            });
+        }
+    }
 }
