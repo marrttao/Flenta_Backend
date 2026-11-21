@@ -15,6 +15,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<AuthenticationService>();
+        services.AddScoped<Flenta.Application.Features.Admin.AdminService>();
         services.AddScoped<ProfileService>();
         services.AddScoped<AccountService>();
         services.AddScoped<CardService>();

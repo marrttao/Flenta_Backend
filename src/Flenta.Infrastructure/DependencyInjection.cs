@@ -33,6 +33,15 @@ public static class DependencyInjection
             .RemoveAllLoggers();
         services.AddScoped<IIdentityProvider, SupabaseIdentityProvider>();
         services.AddScoped<IUserProfileRepository, SupabaseUserProfileRepository>();
+        services.AddOptions<AdminOptions>().BindConfiguration("Admin")
+            .Validate(options => string.IsNullOrEmpty(options.SupabaseSecretKey) || AdminOptions.IsServerKey(options.SupabaseSecretKey),
+                "Admin requires a server-only Supabase secret/service_role key.").ValidateOnStart();
+        services.AddHttpClient<SupabaseAdminDirectory>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.MaxResponseContentBufferSize = 8 * 1024 * 1024;
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).RemoveAllLoggers();
+        services.AddScoped<Flenta.Application.Abstractions.Admin.IAdminRepository, PostgresAdminRepository>();
         services.AddOptions<DiditOptions>().BindConfiguration("Didit")
             .Validate(options => !options.Enabled || options.Configured, "Enabled Didit requires an API key, webhook secret and Workflow ID.")
             .ValidateOnStart();

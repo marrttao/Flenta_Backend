@@ -5,15 +5,17 @@ namespace Flenta.Domain.Entities;
 
 public sealed class UserProfile : Entity
 {
-    public UserProfile(Guid id, EmailAddress email, string displayName, bool emailConfirmed) : base(id)
+    public UserProfile(Guid id, EmailAddress email, string displayName, bool emailConfirmed, bool isAdmin = false) : base(id)
     {
         Email = email;
         EmailConfirmed = emailConfirmed;
+        IsAdmin = isAdmin;
         Rename(displayName);
     }
 
     public EmailAddress Email { get; }
     public bool EmailConfirmed { get; }
+    public bool IsAdmin { get; }
     public string DisplayName { get; private set; } = string.Empty;
 
     public void Rename(string? displayName)

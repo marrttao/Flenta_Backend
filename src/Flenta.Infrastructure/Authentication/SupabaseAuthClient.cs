@@ -81,10 +81,13 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
         if (user.TryGetProperty("user_metadata", out var data) && data.ValueKind == JsonValueKind.Object
             && data.TryGetProperty("display_name", out var name) && name.ValueKind == JsonValueKind.String
             && !string.IsNullOrWhiteSpace(name.GetString())) displayName = name.GetString()!;
-        var confirmed = user.TryGetProperty("email_confirmed_at", out var confirmedAt) && confirmedAt.ValueKind == JsonValueKind.String;
+        var confirmed = user.TryGetProperty("email_confirmed_at", out var confirmedAt) && confirmedAt.ValueKind == JsonValueKind.String
+            && confirmedAt.TryGetDateTimeOffset(out _);
         try
         {
-            return new UserProfile(id, EmailAddress.Create(email), displayName, confirmed);
+            var isAdmin = user.TryGetProperty("app_metadata", out var applicationData) && applicationData.ValueKind == JsonValueKind.Object
+                && applicationData.TryGetProperty("role", out var role) && role.ValueKind == JsonValueKind.String && role.GetString() == "admin";
+            return new UserProfile(id, EmailAddress.Create(email), displayName, confirmed, isAdmin);
         }
         catch (DomainValidationException)
         {
@@ -102,7 +105,7 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
             || !data.TryGetProperty("user", out var user)) throw Unavailable();
         var profile = ReadUser(user);
         return new AuthSession(access.GetString()!, refresh.GetString()!, expiresIn,
-            new ProfileResponse(profile.Id, profile.Email.Value, profile.DisplayName, profile.EmailConfirmed));
+            new ProfileResponse(profile.Id, profile.Email.Value, profile.DisplayName, profile.EmailConfirmed, profile.IsAdmin));
     }
 
     private static ApplicationFailureException MapError(HttpStatusCode status, string code) => code switch

@@ -26,6 +26,9 @@ public static class ApiServiceCollectionExtensions
             options.DefaultPolicy = verified;
             options.FallbackPolicy = verified;
             options.AddPolicy(KycPolicies.Onboarding, policy => policy.RequireAuthenticatedUser());
+            options.AddPolicy("Admin", policy => policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                context.Resource is HttpContext http && http.Items[typeof(Flenta.Domain.Entities.UserProfile)]
+                    is Flenta.Domain.Entities.UserProfile { IsAdmin: true, EmailConfirmed: true }));
         });
         var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
         services.AddCors(options => options.AddDefaultPolicy(policy =>
