@@ -38,8 +38,8 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
                 {
                     using var error = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
                     if (error.RootElement.ValueKind == JsonValueKind.Object
-                        && error.RootElement.TryGetProperty("error_code", out var value) && value.ValueKind == JsonValueKind.String)
-                        code = value.GetString() ?? string.Empty;
+                        && error.RootElement.TryGetProperty("error_code", out var value)
+                        && value.ValueKind == JsonValueKind.String) code = value.GetString() ?? string.Empty;
                 }
                 catch (JsonException) { }
                 throw MapError(response.StatusCode, code);
@@ -48,6 +48,7 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             if (string.IsNullOrWhiteSpace(content)) return default;
             using var document = JsonDocument.Parse(content);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) throw Unavailable();
             return document.RootElement.Clone();
         }
         catch (HttpRequestException)
@@ -87,7 +88,7 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
         }
         catch (DomainValidationException)
         {
-            // Invalid provider data is not invalid input supplied by this request's caller.
+            // Invalid upstream data is not a validation error in the caller's request.
             throw Unavailable();
         }
     }
@@ -118,5 +119,5 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
         _ => new(FailureKind.InvalidRequest, "auth.request_rejected", "The authentication request was rejected. Check the input or request a new email link.")
     };
 
-    private static ApplicationFailureException Unavailable() => new(FailureKind.Unavailable, "auth.provider_unavailable", "Authentication service is unavailable. Try again later.");
+    internal static ApplicationFailureException Unavailable() => new(FailureKind.Unavailable, "auth.provider_unavailable", "Authentication service is unavailable. Try again later.");
 }
