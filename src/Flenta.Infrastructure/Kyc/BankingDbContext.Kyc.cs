@@ -5,12 +5,19 @@ namespace Flenta.Infrastructure.Persistence.Banking;
 
 public sealed partial class BankingDbContext
 {
+    public DbSet<KycIdentitySnapshot> IdentitySnapshots => Set<KycIdentitySnapshot>();
     public DbSet<KycVerification> KycVerifications => Set<KycVerification>();
     public DbSet<KycReviewEvent> KycReviewEvents => Set<KycReviewEvent>();
     public DbSet<KycWebhookReceipt> KycWebhookReceipts => Set<KycWebhookReceipt>();
 
     private static void ConfigureKyc(ModelBuilder model)
     {
+        var identity = model.Entity<KycIdentitySnapshot>(); identity.ToTable("identity_snapshots", "kyc");
+        identity.HasKey(s => s.Id); identity.Property(s => s.Id).ValueGeneratedNever();
+        identity.Property(s => s.TaxFingerprint).HasMaxLength(64); identity.HasIndex(s => s.TaxFingerprint);
+        identity.Property(s => s.Ciphertext).HasMaxLength(8192); identity.Property(s => s.Digest).HasMaxLength(64);
+        identity.HasIndex(s => new { s.VerificationId, s.CreatedAt, s.Id });
+        identity.HasOne<KycVerification>().WithMany().HasForeignKey(s => s.VerificationId).OnDelete(DeleteBehavior.Restrict);
         var verification = model.Entity<KycVerification>();
         verification.ToTable("verifications", "kyc", table =>
         {

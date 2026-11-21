@@ -29,9 +29,11 @@ public static class DependencyInjection
                 && SupabaseOptions.IsPublicKey(options.PublishableKey),
                 "Configure safe Supabase and frontend URLs and a public publishable/anon key.")
             .ValidateOnStart();
-        services.AddHttpClient<SupabaseAuthClient>(client => client.Timeout = TimeSpan.FromSeconds(15))
+        services.AddHttpClient<SupabaseAuthClient>(client => { client.Timeout = TimeSpan.FromSeconds(15); client.MaxResponseContentBufferSize = 1024 * 1024; })
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
             .RemoveAllLoggers();
         services.AddScoped<IIdentityProvider, SupabaseIdentityProvider>();
+        services.AddScoped<ISecondFactorProvider, SupabaseSecondFactorProvider>();
         services.AddScoped<IUserProfileRepository, SupabaseUserProfileRepository>();
         services.AddOptions<AdminOptions>().BindConfiguration("Admin")
             .Validate(options => string.IsNullOrEmpty(options.SupabaseSecretKey) || AdminOptions.IsServerKey(options.SupabaseSecretKey),
@@ -66,11 +68,21 @@ public static class DependencyInjection
             builder.UseNpgsql(string.IsNullOrWhiteSpace(connection) ? null : connection);
         });
         services.AddScoped<PostgresBankingStore>();
+        services.AddScoped<PostgresDesktopRepository>();
+        services.AddScoped<PostgresDesktopBankingRepository>();
+        services.AddScoped<ICardRoutingRepository>(p => p.GetRequiredService<PostgresDesktopBankingRepository>());
+        services.AddScoped<IStatementRepository>(p => p.GetRequiredService<PostgresDesktopBankingRepository>());
+        services.AddScoped<Flenta.Application.Abstractions.Admin.IAdminWorkflowRepository, PostgresAdminWorkflowRepository>();
+        services.AddScoped<Flenta.Application.Abstractions.Desktop.ISettingsRepository>(p => p.GetRequiredService<PostgresDesktopRepository>());
+        services.AddScoped<Flenta.Application.Abstractions.Desktop.IRecipientRepository>(p => p.GetRequiredService<PostgresDesktopRepository>());
+        services.AddScoped<Flenta.Application.Abstractions.Desktop.ISupportRepository>(p => p.GetRequiredService<PostgresDesktopRepository>());
+        services.AddScoped<Flenta.Application.Abstractions.Desktop.INotificationRepository>(p => p.GetRequiredService<PostgresDesktopRepository>());
         services.AddScoped<IFinanceRepository>(provider => provider.GetRequiredService<PostgresBankingStore>());
         services.AddHttpClient<IExchangeRateProvider, NbuExchangeRateProvider>(client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IBankingRepository>(provider => provider.GetRequiredService<PostgresBankingStore>());
         services.AddScoped<IBankingUnitOfWork>(provider => provider.GetRequiredService<PostgresBankingStore>());
         services.AddSingleton<ICardVault, SandboxCardVault>();
+        services.AddSingleton<IIdentityVault, IdentityVault>();
         services.AddSingleton<IFeePolicy>(provider =>
         {
             var settings = provider.GetRequiredService<IOptions<BankingOptions>>().Value;

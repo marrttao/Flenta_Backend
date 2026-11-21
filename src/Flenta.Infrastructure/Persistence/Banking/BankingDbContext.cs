@@ -18,6 +18,8 @@ public sealed partial class BankingDbContext(DbContextOptions<BankingDbContext> 
     protected override void OnModelCreating(ModelBuilder model)
     {
         ConfigureKyc(model);
+        ConfigureDesktop(model);
+        ConfigureAdminWorkflow(model);
         model.HasDefaultSchema("banking");
         var account = model.Entity<BankAccount>();
         account.ToTable("accounts", table =>
@@ -38,22 +40,41 @@ public sealed partial class BankingDbContext(DbContextOptions<BankingDbContext> 
         {
             account.HasData(new
             {
-                Id = SystemAccounts.Clearing(currency), OwnerId = (Guid?)null, Iban = (string?)null,
-                Kind = AccountKind.SandboxClearing, BalanceMinorUnits = 0L, CreatedAt = DateTimeOffset.UnixEpoch, CurrencyCode = currency
+                Id = SystemAccounts.Clearing(currency),
+                OwnerId = (Guid?)null,
+                Iban = (string?)null,
+                Blocked = false,
+                Kind = AccountKind.SandboxClearing,
+                BalanceMinorUnits = 0L,
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                CurrencyCode = currency
             }, new
             {
-                Id = SystemAccounts.Fees(currency), OwnerId = (Guid?)null, Iban = (string?)null,
-                Kind = AccountKind.FeeRevenue, BalanceMinorUnits = 0L, CreatedAt = DateTimeOffset.UnixEpoch, CurrencyCode = currency
+                Id = SystemAccounts.Fees(currency),
+                OwnerId = (Guid?)null,
+                Iban = (string?)null,
+                Blocked = false,
+                Kind = AccountKind.FeeRevenue,
+                BalanceMinorUnits = 0L,
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                CurrencyCode = currency
             }, new
             {
-                Id = SystemAccounts.Merchant(currency), OwnerId = (Guid?)null, Iban = (string?)null,
-                Kind = AccountKind.SandboxMerchant, BalanceMinorUnits = 0L, CreatedAt = DateTimeOffset.UnixEpoch, CurrencyCode = currency
+                Id = SystemAccounts.Merchant(currency),
+                OwnerId = (Guid?)null,
+                Iban = (string?)null,
+                Blocked = false,
+                Kind = AccountKind.SandboxMerchant,
+                BalanceMinorUnits = 0L,
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                CurrencyCode = currency
             });
         }
 
         var card = model.Entity<VirtualCard>();
         card.ToTable("cards", table =>
         {
+            table.HasCheckConstraint("ck_card_limits", "\"MonthlyLimitMinorUnits\" > 0 AND \"MonthlyLimitMinorUnits\" <= 1000000000000 AND \"SpentMinorUnits\" >= 0");
             table.HasCheckConstraint("ck_card_status", "\"Status\" IN ('Active', 'Blocked', 'Closed')");
             table.HasCheckConstraint("ck_card_last4", "\"Last4\" ~ '^[0-9]{4}$'");
         });
@@ -64,6 +85,10 @@ public sealed partial class BankingDbContext(DbContextOptions<BankingDbContext> 
         card.Property(c => c.Fingerprint).HasMaxLength(64);
         card.Property(c => c.Status).HasConversion<string>().HasMaxLength(16);
         card.Ignore(c => c.MaskedNumber);
+        card.Property(c => c.OnlinePayments).HasDefaultValue(true);
+        card.Property(c => c.ContactlessPayments).HasDefaultValue(true);
+        card.Property(c => c.CashWithdrawals).HasDefaultValue(true);
+        card.Property(c => c.MonthlyLimitMinorUnits).HasDefaultValue(Money.MaximumMinorUnits);
         card.HasIndex(c => c.Fingerprint).IsUnique();
         card.HasOne<BankAccount>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Restrict);
 
@@ -76,6 +101,7 @@ public sealed partial class BankingDbContext(DbContextOptions<BankingDbContext> 
         transaction.Property(t => t.CurrencyCode).HasMaxLength(3).HasDefaultValue("UAH");
         transaction.Property(t => t.DestinationCurrency).HasMaxLength(3);
         transaction.Property(t => t.ExchangeRate).HasPrecision(28, 12);
+        transaction.Property(t => t.Memo).HasMaxLength(280);
         transaction.Property(t => t.SavingsSkipReason).HasMaxLength(100);
         transaction.HasKey(t => t.Id);
         transaction.Property(t => t.Id).ValueGeneratedNever();

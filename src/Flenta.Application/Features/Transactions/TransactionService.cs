@@ -13,7 +13,7 @@ namespace Flenta.Application.Features.Transactions;
 
 public sealed record TransactionResponse(Guid Id, string Kind, string Status, Guid? SourceAccountId, Guid? DestinationAccountId,
     string? DestinationIban, decimal Amount, decimal Fee, string Currency, DateTimeOffset CreatedAt, DateTimeOffset? FinishedAt, string? FailureCode, string? DestinationCurrency = null, decimal? ReceivedAmount = null,
-    decimal? ExchangeRate = null, DateOnly? RateDate = null, decimal Cashback = 0, decimal Saved = 0, Guid? GoalId = null, string? SavingsSkipReason = null);
+    decimal? ExchangeRate = null, DateOnly? RateDate = null, decimal Cashback = 0, decimal Saved = 0, Guid? GoalId = null, string? SavingsSkipReason = null, string? Memo = null);
 public sealed record TransferQuote(decimal Amount, decimal Fee, decimal Total, string Currency, bool SufficientFunds);
 
 public sealed class TransactionService(IBankingRepository repository, IBankingUnitOfWork unitOfWork, ICurrentUser user, IClock clock, IFeePolicy fees)
@@ -34,19 +34,20 @@ public sealed class TransactionService(IBankingRepository repository, IBankingUn
     public Task<TransactionResponse> TopUpAsync(Guid accountId, decimal amount, Guid key, CancellationToken cancellationToken) =>
         ExecuteAsync(TransactionKind.TopUp, accountId, null, null, amount, key, cancellationToken);
 
-    public Task<TransactionResponse> TransferAsync(Guid sourceId, Guid destinationId, decimal amount, Guid key, CancellationToken cancellationToken) =>
-        ExecuteAsync(TransactionKind.InternalTransfer, sourceId, destinationId, null, amount, key, cancellationToken);
+    public Task<TransactionResponse> TransferAsync(Guid sourceId, Guid destinationId, decimal amount, Guid key, CancellationToken cancellationToken, string? memo = null) =>
+        ExecuteAsync(TransactionKind.InternalTransfer, sourceId, destinationId, null, amount, key, cancellationToken, memo);
 
-    public Task<TransactionResponse> TransferByIbanAsync(Guid sourceId, string iban, decimal amount, Guid key, CancellationToken cancellationToken) =>
-        ExecuteAsync(TransactionKind.IbanTransfer, sourceId, null, Iban.Parse(iban).Value, amount, key, cancellationToken);
+    public Task<TransactionResponse> TransferByIbanAsync(Guid sourceId, string iban, decimal amount, Guid key, CancellationToken cancellationToken, string? memo = null) =>
+        ExecuteAsync(TransactionKind.IbanTransfer, sourceId, null, Iban.Parse(iban).Value, amount, key, cancellationToken, memo);
 
     private Task<TransactionResponse> ExecuteAsync(TransactionKind kind, Guid customerAccountId, Guid? destinationId, string? iban,
-        decimal amountValue, Guid key, CancellationToken cancellationToken)
+        decimal amountValue, Guid key, CancellationToken cancellationToken, string? memo = null)
     {
         if (key == Guid.Empty) throw new DomainValidationException("transaction.idempotency_key_required", "A non-empty Idempotency-Key UUID header is required.");
         var amount = Money.FromDecimal(amountValue);
         amount.RequirePositive();
-        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{kind}|{customerAccountId:N}|{destinationId:N}|{iban}|{amount.MinorUnits}")));
+        var normalizedMemo = BankTransaction.NormalizeMemo(memo);
+        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{kind}|{customerAccountId:N}|{destinationId:N}|{iban}|{amount.MinorUnits}" + (normalizedMemo is null ? "" : "|" + normalizedMemo))));
         return unitOfWork.ExecuteAsync(user.Profile.Id, key, async ct =>
         {
             var existing = await repository.ByKeyAsync(user.Profile.Id, key, ct);
@@ -68,6 +69,7 @@ public sealed class TransactionService(IBankingRepository repository, IBankingUn
             var locked = (await repository.LockAccountsAsync(ids, ct)).ToDictionary(a => a.Id);
             var storedTargetId = targetId is not null && locked.TryGetValue(targetId.Value, out var candidate) && candidate.Kind == AccountKind.Customer ? targetId : null;
             var operation = new BankTransaction(user.Profile.Id, key, fingerprint, kind, sourceId, storedTargetId, iban, amount, fee, clock.UtcNow, customer.CurrencyCode);
+            operation.DescribeMemo(normalizedMemo);
             repository.Add(operation);
 
             try
@@ -117,5 +119,5 @@ public sealed class TransactionService(IBankingRepository repository, IBankingUn
         operation.Kind == TransactionKind.TopUp ? null : operation.SourceAccountId, operation.DestinationAccountId, operation.DestinationIban,
         operation.AmountMinorUnits / 100m, operation.FeeMinorUnits / 100m, operation.CurrencyCode, operation.CreatedAt, operation.FinishedAt, operation.FailureCode,
         operation.DestinationCurrency, operation.ReceivedMinorUnits / 100m, operation.ExchangeRate, operation.RateDate,
-        operation.CashbackMinorUnits / 100m, operation.SavedMinorUnits / 100m, operation.GoalId, operation.SavingsSkipReason);
+        operation.CashbackMinorUnits / 100m, operation.SavedMinorUnits / 100m, operation.GoalId, operation.SavingsSkipReason, operation.Memo);
 }

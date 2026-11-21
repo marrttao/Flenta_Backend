@@ -8,7 +8,7 @@ namespace Flenta.Application.Features.Accounts;
 
 public sealed record AccountResponse(Guid Id, string Iban, string Currency, decimal Balance, DateTimeOffset CreatedAt);
 
-public sealed class AccountService(IBankingRepository repository, IBankingUnitOfWork unitOfWork, ICurrentUser user, IClock clock)
+public sealed class AccountService(IBankingRepository repository, IBankingUnitOfWork unitOfWork, ICurrentUser user, IClock clock, Flenta.Application.Abstractions.Admin.IAdminWorkflowRepository controls)
 {
     public async Task<IReadOnlyList<AccountResponse>> ListAsync(CancellationToken cancellationToken) =>
         (await repository.AccountsAsync(user.Profile.Id, cancellationToken)).Select(ToResponse).ToArray();
@@ -17,11 +17,13 @@ public sealed class AccountService(IBankingRepository repository, IBankingUnitOf
         ToResponse(await repository.OwnedAccountAsync(user.Profile.Id, id, cancellationToken) ?? throw Missing());
 
     public Task<AccountResponse> OpenAsync(CancellationToken cancellationToken, string currency = "UAH") =>
-        unitOfWork.ExecuteAsync(user.Profile.Id, Guid.NewGuid(), _ =>
+        unitOfWork.ExecuteAsync(user.Profile.Id, Guid.NewGuid(), async ct =>
         {
+            if ((await controls.ControlAsync(user.Profile.Id, true, ct))?.Blocked == true)
+                throw new ApplicationFailureException(FailureKind.Forbidden, "account.blocked", "This client is restricted. Contact support.");
             var account = BankAccount.Open(user.Profile.Id, clock.UtcNow, currency);
             repository.Add(account);
-            return Task.FromResult(ToResponse(account));
+            return ToResponse(account);
         }, cancellationToken);
 
     public static ApplicationFailureException Missing() => new(FailureKind.NotFound, "banking.not_found", "Resource not found.");

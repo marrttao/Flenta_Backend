@@ -22,7 +22,7 @@ public sealed class TransactionsController(TransactionService transactions) : Co
 
     [HttpPost("internal")]
     public Task<TransactionResponse> Internal(InternalTransferRequest request, [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey, CancellationToken cancellationToken) =>
-        transactions.TransferAsync(request.SourceAccountId, request.DestinationAccountId, request.Amount, idempotencyKey, cancellationToken);
+        transactions.TransferAsync(request.SourceAccountId, request.DestinationAccountId, request.Amount, idempotencyKey, cancellationToken, request.Memo);
 
     [HttpPost("quote")]
     public Task<TransferQuote> Quote(TransferQuoteRequest request, CancellationToken cancellationToken) =>
@@ -30,9 +30,9 @@ public sealed class TransactionsController(TransactionService transactions) : Co
 
     [HttpPost("iban")]
     public Task<TransactionResponse> ByIban(IbanTransferRequest request, [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey, CancellationToken cancellationToken) =>
-        transactions.TransferByIbanAsync(request.SourceAccountId, request.Iban, request.Amount, idempotencyKey, cancellationToken);
+        transactions.TransferByIbanAsync(request.SourceAccountId, request.Iban, request.Amount, idempotencyKey, cancellationToken, request.Memo);
 }
 
-public sealed record InternalTransferRequest(Guid SourceAccountId, Guid DestinationAccountId, decimal Amount);
+public sealed record InternalTransferRequest(Guid SourceAccountId, Guid DestinationAccountId, decimal Amount, [StringLength(280)] string? Memo = null);
 public sealed record TransferQuoteRequest(Guid SourceAccountId, decimal Amount, bool ByIban);
-public sealed record IbanTransferRequest(Guid SourceAccountId, [Required, StringLength(64)] string Iban, decimal Amount);
+public sealed record IbanTransferRequest(Guid SourceAccountId, [Required, StringLength(64)] string Iban, decimal Amount, [StringLength(280)] string? Memo = null);

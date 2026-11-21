@@ -25,7 +25,9 @@ public sealed class DiditClient(HttpClient client, IOptions<DiditOptions> option
         var configuration = Configuration;
         using var created = await SendAsync(HttpMethod.Post, "/v3/session/", JsonSerializer.SerializeToUtf8Bytes(new
         {
-            workflow_id = configuration.ConfigurationId, vendor_data = externalUserId, language = "uk",
+            workflow_id = configuration.ConfigurationId,
+            vendor_data = externalUserId,
+            language = "uk",
             expected_details = new { id_country = "UKR" }
         }), ct);
         var id = SessionId(String(created.RootElement, "session_id"));
@@ -56,9 +58,51 @@ public sealed class DiditClient(HttpClient client, IOptions<DiditOptions> option
             _ => KycStatus.PendingReview
         };
         return new KycSessionSnapshot(id, vendor, configuration.ConfigurationId, configuration.Sandbox, status,
-            status == KycStatus.Verified && RequirementsMet(root, id), VerificationUrl(String(root, "session_url")));
+            status == KycStatus.Verified && RequirementsMet(root, id), VerificationUrl(String(root, "session_url")), ReadIdentity(root), ReadEvidence(root), RequirementsMet(root, id));
     }
 
+    private static JsonElement? Document(JsonElement root, bool approvedOnly)
+    {
+        if (!root.TryGetProperty("id_verifications", out var items) || items.ValueKind != JsonValueKind.Array) return null;
+        return items.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object && (!approvedOnly || String(item, "status") == "Approved")).Select(item => (JsonElement?)item).FirstOrDefault();
+    }
+    private static KycIdentityData? ReadIdentity(JsonElement root)
+    {
+        var item = Document(root, true); if (item is null) return null;
+        var doc = item.Value; var name = String(doc, "full_name") ?? string.Join(" ", new[] { String(doc, "first_name"), String(doc, "last_name") }.Where(v => !string.IsNullOrWhiteSpace(v)));
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (name.Length > 100 || name.Any(char.IsControl)) throw Unavailable();
+        DateOnly? birth = null;
+        if (String(doc, "date_of_birth") is { } date)
+        {
+            if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed)) throw Unavailable();
+            birth = parsed;
+        }
+        var country = String(doc, "issuing_state") ?? "";
+        if (country.Length > 3 || country.Any(c => !char.IsAsciiLetter(c))) throw Unavailable();
+        string? tax = null;
+        if (country == "UKR" && String(doc, "personal_number") is { } personal)
+        {
+            try { tax = Flenta.Domain.ValueObjects.Rnokpp.Parse(personal).Value; } catch (Flenta.Domain.Exceptions.DomainValidationException) { }
+        }
+        var number = String(doc, "document_number"); var type = String(doc, "document_type") ?? "";
+        if (number?.Length > 64 || number?.Any(char.IsControl) == true || type.Length > 64 || type.Any(char.IsControl)) throw Unavailable();
+        return new(name.Trim(), birth, country, tax, number, type);
+    }
+    private static KycDocumentEvidence? ReadEvidence(JsonElement root)
+    {
+        var item = Document(root, false);
+        return item is null ? null : new(SafeDocumentUrl(String(item.Value, "front_image")), SafeDocumentUrl(String(item.Value, "back_image")));
+    }
+    public static string? SafeDocumentUrl(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return null;
+        if (value.Length > 8192 || !Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !uri.IsDefaultPort
+            || uri.UserInfo.Length > 0 || uri.Fragment.Length > 0 || uri.HostNameType != UriHostNameType.Dns
+            || !uri.IdnHost.Contains('.') || uri.IdnHost.EndsWith(".local", StringComparison.OrdinalIgnoreCase)
+            || uri.IdnHost.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) || uri.IdnHost.EndsWith(".internal", StringComparison.OrdinalIgnoreCase)) return null;
+        return uri.AbsoluteUri;
+    }
     public static string? VerificationUrl(string? value)
     {
         if (value is null) return null;
@@ -95,7 +139,8 @@ public sealed class DiditClient(HttpClient client, IOptions<DiditOptions> option
             return json;
         }
         catch (Exception exception) when (exception is HttpRequestException or JsonException or IOException
-            || exception is OperationCanceledException && !ct.IsCancellationRequested) { throw Unavailable(); }
+            || exception is OperationCanceledException && !ct.IsCancellationRequested)
+        { throw Unavailable(); }
     }
     private static string SessionId(string? value) => Guid.TryParseExact(value, "D", out var id) && id != Guid.Empty ? id.ToString("D") : throw Unavailable();
     private static string? String(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

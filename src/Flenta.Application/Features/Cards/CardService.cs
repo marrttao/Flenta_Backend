@@ -7,11 +7,11 @@ using Flenta.Domain.Exceptions;
 
 namespace Flenta.Application.Features.Cards;
 
-public sealed record CardResponse(Guid Id, Guid AccountId, string MaskedNumber, string Status, int ExpiryMonth, int ExpiryYear, bool Sandbox, DateTimeOffset? LastSecretsViewedAt);
+public sealed record CardResponse(Guid Id, Guid AccountId, string MaskedNumber, string Status, int ExpiryMonth, int ExpiryYear, bool Sandbox, DateTimeOffset? LastSecretsViewedAt, bool OnlinePayments = true, bool ContactlessPayments = true, bool CashWithdrawals = true, decimal MonthlyLimit = 10000000000m, bool AdminFrozen = false);
 public sealed record CardSecretsResponse(string Number, string Cvv, int ExpiryMonth, int ExpiryYear, bool Sandbox);
 
 public sealed class CardService(IBankingRepository repository, IBankingUnitOfWork unitOfWork, ICurrentUser user,
-    IClock clock, ICardVault vault, IIdentityProvider identityProvider)
+    IClock clock, ICardVault vault, IIdentityProvider identityProvider, Flenta.Application.Abstractions.Admin.IAdminWorkflowRepository controls)
 {
     public async Task<IReadOnlyList<CardResponse>> ListAsync(CancellationToken cancellationToken) =>
         (await repository.CardsAsync(user.Profile.Id, cancellationToken)).Select(ToResponse).ToArray();
@@ -22,6 +22,9 @@ public sealed class CardService(IBankingRepository repository, IBankingUnitOfWor
     public Task<CardResponse> CreateAsync(Guid accountId, CancellationToken cancellationToken) =>
         unitOfWork.ExecuteAsync(user.Profile.Id, Guid.NewGuid(), async ct =>
         {
+            var control = await controls.ControlAsync(user.Profile.Id, true, ct);
+            if (control?.Blocked == true || control?.CardsFrozen == true)
+                throw new ApplicationFailureException(FailureKind.Forbidden, "card.restricted", "Card creation is restricted. Contact support.");
             _ = await repository.OwnedAccountAsync(user.Profile.Id, accountId, ct) ?? throw AccountService.Missing();
             var id = Guid.NewGuid();
             var prepared = vault.Create(user.Profile.Id, id);
@@ -44,6 +47,13 @@ public sealed class CardService(IBankingRepository repository, IBankingUnitOfWor
             }
             return ToResponse(card);
         }, cancellationToken);
+
+    public Task<CardResponse> ConfigureAsync(Guid id, bool online, bool contactless, bool cash, decimal limit, CancellationToken ct) =>
+        unitOfWork.ExecuteAsync(user.Profile.Id, Guid.NewGuid(), async token =>
+        {
+            var card = await repository.OwnedCardAsync(user.Profile.Id, id, true, token) ?? throw AccountService.Missing();
+            card.Configure(online, contactless, cash, limit); return ToResponse(card);
+        }, ct);
 
     public async Task<CardSecretsResponse> RevealAsync(Guid id, string password, CancellationToken cancellationToken)
     {
@@ -73,5 +83,5 @@ public sealed class CardService(IBankingRepository repository, IBankingUnitOfWor
         }, cancellationToken);
     }
 
-    public static CardResponse ToResponse(VirtualCard card) => new(card.Id, card.AccountId, card.MaskedNumber, card.Status.ToString(), card.ExpiryMonth, card.ExpiryYear, true, card.LastSecretsViewedAt);
+    public static CardResponse ToResponse(VirtualCard card) => new(card.Id, card.AccountId, card.MaskedNumber, card.Status.ToString(), card.ExpiryMonth, card.ExpiryYear, true, card.LastSecretsViewedAt, card.OnlinePayments, card.ContactlessPayments, card.CashWithdrawals, card.MonthlyLimitMinorUnits / 100m, card.AdminFrozen);
 }

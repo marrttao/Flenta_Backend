@@ -24,13 +24,27 @@ app.Use(async (context, next) =>
         || context.Request.Path.StartsWithSegments("/api/accounts") || context.Request.Path.StartsWithSegments("/api/cards")
         || context.Request.Path.StartsWithSegments("/api/transactions") || context.Request.Path.StartsWithSegments("/api/goals")
         || context.Request.Path.StartsWithSegments("/api/finance") || context.Request.Path.StartsWithSegments("/api/kyc")
-        || context.Request.Path.StartsWithSegments("/api/admin"))
+        || context.Request.Path.StartsWithSegments("/api/admin") || context.Request.Path.StartsWithSegments("/api/settings")
+        || context.Request.Path.StartsWithSegments("/api/recipients") || context.Request.Path.StartsWithSegments("/api/support")
+        || context.Request.Path.StartsWithSegments("/api/notifications") || context.Request.Path.StartsWithSegments("/api/payments") || context.Request.Path.StartsWithSegments("/api/statements"))
         context.Response.Headers.CacheControl = "no-store";
     await next(context);
 });
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.Items[typeof(Flenta.Domain.Entities.UserProfile)] is Flenta.Domain.Entities.UserProfile { MfaEnabled: true, MfaVerified: false }
+        && !context.Request.Path.StartsWithSegments("/api/auth/mfa") && !context.Request.Path.StartsWithSegments("/api/auth/logout")
+        && !(context.Request.Method == "GET" && context.Request.Path == "/api/profile"))
+    {
+        await Results.Problem(statusCode: 403, title: "Confirm your authenticator code to continue.",
+            extensions: new Dictionary<string, object?> { ["code"] = "auth.mfa_required" }).ExecuteAsync(context);
+        return;
+    }
+    await next(context);
+});
 app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())

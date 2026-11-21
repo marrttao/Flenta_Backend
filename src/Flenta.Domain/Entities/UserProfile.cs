@@ -5,17 +5,19 @@ namespace Flenta.Domain.Entities;
 
 public sealed class UserProfile : Entity
 {
-    public UserProfile(Guid id, EmailAddress email, string displayName, bool emailConfirmed, bool isAdmin = false) : base(id)
+    public UserProfile(Guid id, EmailAddress email, string displayName, bool emailConfirmed, bool isAdmin = false, bool mfaEnabled = false, bool mfaVerified = false) : base(id)
     {
         Email = email;
         EmailConfirmed = emailConfirmed;
-        IsAdmin = isAdmin;
+        IsAdmin = isAdmin; MfaEnabled = mfaEnabled; MfaVerified = mfaVerified;
         Rename(displayName);
     }
 
     public EmailAddress Email { get; }
     public bool EmailConfirmed { get; }
     public bool IsAdmin { get; }
+    public bool MfaEnabled { get; }
+    public bool MfaVerified { get; }
     public string DisplayName { get; private set; } = string.Empty;
 
     public void Rename(string? displayName)

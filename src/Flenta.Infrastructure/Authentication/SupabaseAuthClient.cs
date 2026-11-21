@@ -69,7 +69,7 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
         }
     }
 
-    public static UserProfile ReadUser(JsonElement user)
+    public static UserProfile ReadUser(JsonElement user, string? validatedToken = null)
     {
         if (user.ValueKind != JsonValueKind.Object
             || !user.TryGetProperty("id", out var idElement) || idElement.ValueKind != JsonValueKind.String
@@ -87,7 +87,17 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
         {
             var isAdmin = user.TryGetProperty("app_metadata", out var applicationData) && applicationData.ValueKind == JsonValueKind.Object
                 && applicationData.TryGetProperty("role", out var role) && role.ValueKind == JsonValueKind.String && role.GetString() == "admin";
-            return new UserProfile(id, EmailAddress.Create(email), displayName, confirmed, isAdmin);
+            var mfaEnabled = false;
+            if (user.TryGetProperty("factors", out var factors) && factors.ValueKind != JsonValueKind.Null)
+            {
+                if (factors.ValueKind != JsonValueKind.Array) throw Unavailable();
+                foreach (var factor in factors.EnumerateArray())
+                {
+                    if (factor.ValueKind != JsonValueKind.Object || !factor.TryGetProperty("status", out var status) || status.ValueKind != JsonValueKind.String) throw Unavailable();
+                    if (status.GetString() == "verified") mfaEnabled = true;
+                }
+            }
+            return new UserProfile(id, EmailAddress.Create(email), displayName, confirmed, isAdmin, mfaEnabled, HasSecondFactor(validatedToken, id));
         }
         catch (DomainValidationException)
         {
@@ -96,6 +106,19 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
         }
     }
 
+    // Only called after Supabase has validated this exact bearer token (or issued it in a trusted response).
+    private static bool HasSecondFactor(string? token, Guid owner)
+    {
+        try
+        {
+            var part = token?.Split('.')[1].Replace('-', '+').Replace('_', '/'); if (part is null) return false;
+            part = part.PadRight((part.Length + 3) / 4 * 4, '=');
+            using var payload = JsonDocument.Parse(Convert.FromBase64String(part));
+            return payload.RootElement.TryGetProperty("sub", out var sub) && Guid.TryParse(sub.GetString(), out var id) && id == owner
+                && payload.RootElement.TryGetProperty("aal", out var aal) && aal.GetString() == "aal2";
+        }
+        catch (Exception e) when (e is FormatException or JsonException or IndexOutOfRangeException or InvalidOperationException) { return false; }
+    }
     public static AuthSession ReadSession(JsonElement data)
     {
         if (data.ValueKind != JsonValueKind.Object
@@ -103,9 +126,9 @@ internal sealed class SupabaseAuthClient(HttpClient client, IOptions<SupabaseOpt
             || !data.TryGetProperty("refresh_token", out var refresh) || refresh.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(refresh.GetString())
             || !data.TryGetProperty("expires_in", out var expiry) || expiry.ValueKind != JsonValueKind.Number || !expiry.TryGetInt64(out var expiresIn) || expiresIn <= 0
             || !data.TryGetProperty("user", out var user)) throw Unavailable();
-        var profile = ReadUser(user);
+        var profile = ReadUser(user, access.GetString());
         return new AuthSession(access.GetString()!, refresh.GetString()!, expiresIn,
-            new ProfileResponse(profile.Id, profile.Email.Value, profile.DisplayName, profile.EmailConfirmed, profile.IsAdmin));
+            new ProfileResponse(profile.Id, profile.Email.Value, profile.DisplayName, profile.EmailConfirmed, profile.IsAdmin, profile.MfaEnabled, profile.MfaVerified));
     }
 
     private static ApplicationFailureException MapError(HttpStatusCode status, string code) => code switch

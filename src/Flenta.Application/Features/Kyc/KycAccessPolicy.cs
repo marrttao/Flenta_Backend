@@ -12,7 +12,9 @@ public sealed class KycAccessPolicy(IKycRepository repository, IKycProvider prov
             throw new ApplicationFailureException(FailureKind.Forbidden, "kyc.email_required", "Confirm your email before identity verification.");
         var configuration = provider.Configuration;
         var verification = await repository.GetAsync(user.Profile.Id, configuration.Name, false, cancellationToken);
-        if (verification?.CanAccess(configuration.Name, configuration.ConfigurationId, configuration.Sandbox) != true)
+        var manual = verification is not null && verification.Matches(configuration.Name, configuration.ConfigurationId, configuration.Sandbox)
+            ? await repository.ManualDecisionAsync(verification, cancellationToken) : null;
+        if (!(manual ?? verification?.CanAccess(configuration.Name, configuration.ConfigurationId, configuration.Sandbox) ?? false))
             throw new ApplicationFailureException(FailureKind.Forbidden, "kyc.required", "Complete identity verification to use the application.");
     }
 }

@@ -1,4 +1,5 @@
 using Flenta.Domain.Exceptions;
+using Flenta.Domain.ValueObjects;
 
 namespace Flenta.Domain.Entities;
 
@@ -31,6 +32,36 @@ public sealed class VirtualCard : Entity
     public CardStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? LastSecretsViewedAt { get; private set; }
+    public bool AdminFrozen { get; private set; }
+    public void SetAdminFrozen(bool frozen) => AdminFrozen = frozen;
+    public bool OnlinePayments { get; private set; } = true;
+    public bool ContactlessPayments { get; private set; } = true;
+    public bool CashWithdrawals { get; private set; } = true;
+    public long MonthlyLimitMinorUnits { get; private set; } = Money.MaximumMinorUnits;
+    public long SpentMinorUnits { get; private set; }
+    public int SpendingMonth { get; private set; }
+    public void Configure(bool online, bool contactless, bool cash, decimal limit)
+    {
+        EnsureNotClosed();
+        var money = Money.FromDecimal(limit); money.RequirePositive();
+        OnlinePayments = online; ContactlessPayments = contactless; CashWithdrawals = cash; MonthlyLimitMinorUnits = money.MinorUnits;
+    }
+    public void EnsureCanPurchase(Money amount, string channel, DateTimeOffset now)
+    {
+        EnsureUsable(now);
+        if (channel is not ("Online" or "Contactless" or "CashWithdrawal") || channel == "Online" && !OnlinePayments || channel == "Contactless" && !ContactlessPayments || channel == "CashWithdrawal" && !CashWithdrawals)
+            throw new DomainValidationException("card.channel_disabled", "This payment channel is disabled.");
+        var month = now.UtcDateTime.Year * 100 + now.UtcDateTime.Month;
+        var spent = SpendingMonth == month ? SpentMinorUnits : 0;
+        if (amount.MinorUnits > MonthlyLimitMinorUnits - spent)
+            throw new DomainValidationException("card.monthly_limit", "The monthly card spending limit would be exceeded.");
+    }
+    public void RecordPurchase(Money amount, DateTimeOffset now)
+    {
+        var month = now.UtcDateTime.Year * 100 + now.UtcDateTime.Month;
+        if (SpendingMonth != month) { SpendingMonth = month; SpentMinorUnits = 0; }
+        SpentMinorUnits = checked(SpentMinorUnits + amount.MinorUnits);
+    }
     public string MaskedNumber => "**** **** **** " + Last4;
 
     public void Block() { EnsureNotClosed(); Status = CardStatus.Blocked; }
@@ -44,7 +75,7 @@ public sealed class VirtualCard : Entity
 
     public void EnsureUsable(DateTimeOffset now)
     {
-        if (Status != CardStatus.Active || now >= new DateTimeOffset(ExpiryYear, ExpiryMonth, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1))
+        if (AdminFrozen || Status != CardStatus.Active || now >= new DateTimeOffset(ExpiryYear, ExpiryMonth, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1))
             throw new DomainValidationException("card.unavailable", "The card is blocked, closed or expired.");
     }
 

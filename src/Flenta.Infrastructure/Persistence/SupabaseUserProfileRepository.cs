@@ -7,8 +7,8 @@ namespace Flenta.Infrastructure.Persistence;
 internal sealed class SupabaseUserProfileRepository(SupabaseAuthClient client) : IUserProfileRepository
 {
     public async Task<UserProfile> GetCurrentAsync(string accessToken, CancellationToken cancellationToken) =>
-        SupabaseAuthClient.ReadUser(await client.SendAsync(HttpMethod.Get, "user", null, accessToken, cancellationToken));
+        SupabaseAuthClient.ReadUser(await client.SendAsync(HttpMethod.Get, "user", null, accessToken, cancellationToken), accessToken);
 
     public async Task<UserProfile> UpdateCurrentAsync(string accessToken, string displayName, CancellationToken cancellationToken) =>
-        SupabaseAuthClient.ReadUser(await client.SendAsync(HttpMethod.Put, "user", new { data = new { display_name = displayName } }, accessToken, cancellationToken));
+        SupabaseAuthClient.ReadUser(await client.SendAsync(HttpMethod.Put, "user", new { data = new { display_name = displayName } }, accessToken, cancellationToken), accessToken);
 }

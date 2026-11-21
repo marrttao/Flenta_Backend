@@ -3,7 +3,7 @@ using Flenta.Domain.ValueObjects;
 
 namespace Flenta.Domain.Entities;
 
-public enum TransactionKind { TopUp, InternalTransfer, IbanTransfer, SavingsDeposit, SavingsWithdrawal, Purchase, Exchange }
+public enum TransactionKind { TopUp, InternalTransfer, IbanTransfer, SavingsDeposit, SavingsWithdrawal, Purchase, Exchange, AdminAdjustment, MobileTopUp, LoanRepayment, CardTransfer, Compensation, CashWithdrawal }
 public enum TransactionStatus { Pending, Completed, Rejected }
 
 public sealed class BankTransaction : Entity
@@ -47,13 +47,16 @@ public sealed class BankTransaction : Entity
     public long CashbackMinorUnits { get; private set; }
     public long SavedMinorUnits { get; private set; }
     public Guid? GoalId { get; private set; }
+    public string? Memo { get; private set; }
+    public static string? NormalizeMemo(string? memo) { var value = memo?.Trim(); if (value?.Length > 280 || value?.Any(char.IsControl) == true) throw new DomainValidationException("transaction.invalid_memo", "Use a message of up to 280 characters."); return string.IsNullOrEmpty(value) ? null : value; }
+    public void DescribeMemo(string? memo) { EnsurePending(); Memo = NormalizeMemo(memo); }
     public string? SavingsSkipReason { get; private set; }
 
     public void DescribeExchange(string destinationCurrency, Money received, decimal rate, DateOnly rateDate)
     {
         EnsurePending();
         received.RequirePositive();
-        if (Kind != TransactionKind.Exchange || rate <= 0 || CurrencyCode == Currency.Parse(destinationCurrency))
+        if (Kind is not (TransactionKind.Exchange or TransactionKind.Compensation) || rate <= 0 || CurrencyCode == Currency.Parse(destinationCurrency))
             throw new DomainValidationException("exchange.invalid", "Invalid exchange details.");
         DestinationCurrency = destinationCurrency;
         ReceivedMinorUnits = received.MinorUnits;

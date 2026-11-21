@@ -21,6 +21,8 @@ public sealed class BankAccount : Entity
     public AccountKind Kind { get; private set; }
     public string CurrencyCode { get; private set; } = "UAH";
     public long BalanceMinorUnits { get; private set; }
+    public bool Blocked { get; private set; }
+    public void SetBlocked(bool blocked) => Blocked = blocked;
     public DateTimeOffset CreatedAt { get; private set; }
 
     public static BankAccount Open(Guid ownerId, DateTimeOffset now, string currency = "UAH")
@@ -40,6 +42,7 @@ public sealed class BankAccount : Entity
     public void EnsureCanDebit(Money amount)
     {
         amount.RequirePositive();
+        if (Blocked) throw new DomainValidationException("account.blocked", "This account is restricted. Contact support.");
         if (Kind != AccountKind.SandboxClearing && BalanceMinorUnits < amount.MinorUnits)
             throw new DomainValidationException("account.insufficient_funds", "Insufficient funds including the fee.");
         if (BalanceMinorUnits < long.MinValue + amount.MinorUnits)
