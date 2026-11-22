@@ -56,6 +56,15 @@ public sealed class SandboxCardVault(IOptions<BankingOptions> options) : ICardVa
         }
     }
 
+    public string Fingerprint(string input)
+    {
+        var number = string.Concat(input.Where(c => !char.IsWhiteSpace(c)));
+        if (number.Length != 16 || number.Any(c => !char.IsAsciiDigit(c)) || CheckDigit(number[..15]) != number[15] - '0')
+            throw new Flenta.Domain.Exceptions.DomainValidationException("card.invalid_number", "Enter a valid 16-digit sandbox card number.");
+        var key = Key();
+        try { return Convert.ToHexString(HMACSHA256.HashData(key, Encoding.ASCII.GetBytes(number))); }
+        finally { CryptographicOperations.ZeroMemory(key); }
+    }
     private byte[] Key()
     {
         if (!options.Value.Enabled || !BankingOptions.ValidKey(options.Value.CardEncryptionKey))

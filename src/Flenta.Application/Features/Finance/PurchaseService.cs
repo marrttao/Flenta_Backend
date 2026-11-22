@@ -20,11 +20,11 @@ public sealed class PurchaseService(IFinanceRepository finance, IBankingReposito
         return new CashbackResponse(CashbackPercentage, (await finance.CashbackAsync(user.Profile.Id, offset, limit, ct)).Select(TransactionService.ToResponse).ToArray());
     }
 
-    public Task<TransactionResponse> PayAsync(Guid cardId, decimal value, Guid key, CancellationToken ct)
+    public Task<TransactionResponse> PayAsync(Guid cardId, decimal value, Guid key, CancellationToken ct, string channel = "Online")
     {
         FinanceOperation.RequireKey(key);
         var amount = Money.FromDecimal(value); amount.RequirePositive();
-        var fingerprint = FinanceOperation.Fingerprint($"Purchase|{cardId:N}|{amount.MinorUnits}");
+        var fingerprint = FinanceOperation.Fingerprint($"Purchase|{cardId:N}|{amount.MinorUnits}|{channel}");
         return unitOfWork.ExecuteAsync(user.Profile.Id, key, async token =>
         {
             var existing = await FinanceOperation.ExistingAsync(bank, user.Profile.Id, key, fingerprint, token);
@@ -36,15 +36,15 @@ public sealed class PurchaseService(IFinanceRepository finance, IBankingReposito
                 .Concat(goal is null ? [] : new[] { goal.AccountId }).ToArray();
             var accounts = (await bank.LockAccountsAsync(ids, token)).ToDictionary(a => a.Id);
             source = accounts[source.Id];
-            var operation = new BankTransaction(user.Profile.Id, key, fingerprint, TransactionKind.Purchase, source.Id,
+            var operation = new BankTransaction(user.Profile.Id, key, fingerprint, channel == "CashWithdrawal" ? TransactionKind.CashWithdrawal : TransactionKind.Purchase, source.Id,
                 SystemAccounts.Merchant(source.CurrencyCode), null, amount, Money.FromMinorUnits(0), clock.UtcNow, source.CurrencyCode);
             bank.Add(operation);
             try
             {
-                card.EnsureUsable(clock.UtcNow);
+                card.EnsureCanPurchase(amount, channel, clock.UtcNow);
                 source.EnsureCanDebit(amount);
-                var cashback = Money.FromMinorUnits((long)decimal.Round(amount.MinorUnits * CashbackPercentage / 100m, 0, MidpointRounding.AwayFromZero));
-                var savings = goal?.Contribution(amount, accounts[goal.AccountId].BalanceMinorUnits) ?? Money.FromMinorUnits(0);
+                var cashback = Money.FromMinorUnits(channel == "CashWithdrawal" ? 0 : (long)decimal.Round(amount.MinorUnits * CashbackPercentage / 100m, 0, MidpointRounding.AwayFromZero));
+                var savings = channel == "CashWithdrawal" ? Money.FromMinorUnits(0) : goal?.Contribution(amount, accounts[goal.AccountId].BalanceMinorUnits) ?? Money.FromMinorUnits(0);
                 string? skipReason = null;
                 if (savings.MinorUnits > 0 && source.BalanceMinorUnits - amount.MinorUnits < savings.MinorUnits)
                 { savings = Money.FromMinorUnits(0); skipReason = "insufficient_funds"; }
@@ -57,6 +57,7 @@ public sealed class PurchaseService(IFinanceRepository finance, IBankingReposito
                 if (savings.MinorUnits > 0) changes.Add((goal!.AccountId, savings.MinorUnits));
                 operation.DescribePurchase(cashback, savings, goal?.Id, skipReason);
                 bank.AddEntries(PostingPlan.Apply(operation, accounts, changes, clock.UtcNow));
+                card.RecordPurchase(amount, clock.UtcNow);
             }
             catch (DomainValidationException exception) when (operation.Status == TransactionStatus.Pending) { operation.Reject(exception.Code, clock.UtcNow); }
             return TransactionService.ToResponse(operation);

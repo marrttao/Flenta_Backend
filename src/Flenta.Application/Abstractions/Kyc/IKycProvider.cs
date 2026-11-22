@@ -4,7 +4,7 @@ namespace Flenta.Application.Abstractions.Kyc;
 
 public sealed record KycProviderConfiguration(string Name, string ConfigurationId, bool Sandbox);
 public sealed record KycSessionSnapshot(string SessionId, string ExternalUserId, string ConfigurationId, bool Sandbox,
-    KycStatus Status, bool RequirementsMet, string? VerificationUrl);
+    KycStatus Status, bool RequirementsMet, string? VerificationUrl, KycIdentityData? Identity = null, KycDocumentEvidence? Evidence = null, bool MandatoryChecksMet = false);
 
 public interface IKycProvider
 {

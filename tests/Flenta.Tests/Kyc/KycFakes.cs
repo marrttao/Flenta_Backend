@@ -16,6 +16,9 @@ internal sealed class KycMemoryStore : IKycRepository, IKycUnitOfWork
     public Task<KycVerification?> GetAsync(Guid ownerId, string provider, bool tracked, CancellationToken ct) => Task.FromResult(Latest(ownerId, provider));
     public Task<KycVerification?> FindSessionAsync(string provider, string sessionId, CancellationToken ct) => Task.FromResult(Verifications.SingleOrDefault(v => v.ProviderName == provider && v.ProviderSessionId == sessionId));
     public Task<bool> HasReceiptAsync(string digest, CancellationToken ct) => Task.FromResult(Receipts.Any(r => r.Digest == digest));
+    public List<KycIdentitySnapshot> Identities { get; } = [];
+    public Task<KycIdentitySnapshot?> LatestIdentityAsync(Guid id, CancellationToken ct) => Task.FromResult(Identities.Where(i => i.VerificationId == id).OrderByDescending(i => i.CreatedAt).FirstOrDefault());
+    public void Add(KycIdentitySnapshot snapshot) => Identities.Add(snapshot);
     public void Add(KycVerification value) => Verifications.Add(value);
     public void Add(KycReviewEvent value) => Reviews.Add(value);
     public void Add(KycWebhookReceipt value) => Receipts.Add(value);

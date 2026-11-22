@@ -25,6 +25,9 @@ internal sealed class PostgresKycRepository(BankingDbContext db) : IKycRepositor
         (tracked ? db.KycVerifications : db.KycVerifications.AsNoTracking()).Where(v => v.OwnerId == ownerId && v.ProviderName == provider).OrderByDescending(v => v.AttemptNumber).FirstOrDefaultAsync(ct));
     public Task<KycVerification?> FindSessionAsync(string provider, string sessionId, CancellationToken ct) => StorageAsync(() =>
         db.KycVerifications.AsNoTracking().SingleOrDefaultAsync(v => v.ProviderName == provider && v.ProviderSessionId == sessionId, ct));
+    public Task<bool?> ManualDecisionAsync(KycVerification verification, CancellationToken ct) => StorageAsync(() =>
+        db.ManualReviews.AsNoTracking().Where(r => r.VerificationId == verification.Id && r.CreatedAt >= verification.UpdatedAt)
+            .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Select(r => (bool?)r.Approved).FirstOrDefaultAsync(ct));
     public Task<bool> HasReceiptAsync(string digest, CancellationToken ct) => db.KycWebhookReceipts.AnyAsync(r => r.Digest == digest, ct);
     public Task<T> ExecuteAsync<T>(Guid ownerId, Func<CancellationToken, Task<T>> action, CancellationToken ct) => StorageAsync(async () =>
     {
@@ -37,6 +40,9 @@ internal sealed class PostgresKycRepository(BankingDbContext db) : IKycRepositor
         await transaction.CommitAsync(ct);
         return result;
     });
+    public Task<KycIdentitySnapshot?> LatestIdentityAsync(Guid verificationId, CancellationToken ct) => StorageAsync(() =>
+        db.IdentitySnapshots.AsNoTracking().Where(s => s.VerificationId == verificationId).OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.Id).FirstOrDefaultAsync(ct));
+    public void Add(KycIdentitySnapshot snapshot) => db.IdentitySnapshots.Add(snapshot);
     public void Add(KycVerification verification) => db.KycVerifications.Add(verification);
     public void Add(KycReviewEvent reviewEvent) => db.KycReviewEvents.Add(reviewEvent);
     public void Add(KycWebhookReceipt receipt) => db.KycWebhookReceipts.Add(receipt);

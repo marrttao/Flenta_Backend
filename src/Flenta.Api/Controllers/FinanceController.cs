@@ -23,7 +23,7 @@ public sealed class FinanceController(ExchangeService exchange, PurchaseService 
 
     [HttpPost("purchases")]
     public Task<TransactionResponse> Purchase(PurchaseRequest request, [FromHeader(Name = "Idempotency-Key")] Guid key, CancellationToken ct) =>
-        purchases.PayAsync(request.CardId, request.Amount, key, ct);
+        purchases.PayAsync(request.CardId, request.Amount, key, ct, request.Channel);
 
     [HttpGet("cashback")]
     public Task<CashbackResponse> Cashback(CancellationToken ct, [FromQuery] int offset = 0, [FromQuery] int limit = 50) =>
@@ -36,4 +36,4 @@ public sealed class FinanceController(ExchangeService exchange, PurchaseService 
 
 public sealed record CurrencyExchangeRequest(Guid SourceAccountId, Guid DestinationAccountId, decimal Amount);
 public sealed record ConfirmExchangeRequest(Guid QuoteId);
-public sealed record PurchaseRequest(Guid CardId, decimal Amount);
+public sealed record PurchaseRequest(Guid CardId, decimal Amount, string Channel = "Online");

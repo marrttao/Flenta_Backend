@@ -78,7 +78,7 @@ public sealed partial class PostgresApiTests
         await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync("UPDATE kyc.verifications SET \"Sandbox\"=false"));
         await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync("DELETE FROM kyc.verifications"));
         var protectedTables = await db.Database.SqlQueryRaw<int>("SELECT count(*)::int AS \"Value\" FROM pg_tables WHERE schemaname='kyc' AND rowsecurity").SingleAsync();
-        Assert.Equal(3, protectedTables);
+        Assert.Equal(5, protectedTables);
     }
 
     [PostgresFact]

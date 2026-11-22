@@ -17,5 +17,5 @@ public sealed class ProfileService(IUserProfileRepository repository, ICurrentUs
     }
 
     public static ProfileResponse ToResponse(UserProfile profile) =>
-        new(profile.Id, profile.Email.Value, profile.DisplayName, profile.EmailConfirmed);
+        new(profile.Id, profile.Email.Value, profile.DisplayName, profile.EmailConfirmed, profile.IsAdmin, profile.MfaEnabled, profile.MfaVerified);
 }

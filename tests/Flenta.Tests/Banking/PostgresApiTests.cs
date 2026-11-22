@@ -254,7 +254,8 @@ public sealed partial class PostgresApiTests : IAsyncLifetime
         using var foreign = await bob.PostAsJsonAsync($"/api/cards/{card.Id}/requisites", new { password = "confirm-card-password" });
         Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
         using var denied = await alice.PostAsJsonAsync($"/api/cards/{card.Id}/requisites", new { password = "incorrect-password" });
-        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Contains("card.confirmation_failed", await denied.Content.ReadAsStringAsync());
         using var revealed = await alice.PostAsJsonAsync($"/api/cards/{card.Id}/requisites", new { password = "confirm-card-password" });
         revealed.EnsureSuccessStatusCode();
         Assert.Equal("no-store", revealed.Headers.CacheControl?.ToString());

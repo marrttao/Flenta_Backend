@@ -22,6 +22,10 @@ public sealed class CardsController(CardService cards) : ControllerBase
     [HttpPost]
     public Task<CardResponse> Create(CreateCardRequest request, CancellationToken cancellationToken) => cards.CreateAsync(request.AccountId, cancellationToken);
 
+    [HttpPut("{id:guid}/settings")]
+    public Task<CardResponse> Configure(Guid id, CardSettingsRequest request, CancellationToken ct) =>
+        cards.ConfigureAsync(id, request.OnlinePayments, request.ContactlessPayments, request.CashWithdrawals, request.MonthlyLimit, ct);
+
     [HttpPost("{id:guid}/block")]
     public Task<CardResponse> Block(Guid id, CancellationToken cancellationToken) => cards.ChangeStatusAsync(id, "block", cancellationToken);
 
@@ -38,3 +42,5 @@ public sealed class CardsController(CardService cards) : ControllerBase
 
 public sealed record CreateCardRequest(Guid AccountId);
 public sealed record ConfirmCardRequest([Required, StringLength(128)] string Password);
+
+public sealed record CardSettingsRequest(bool OnlinePayments, bool ContactlessPayments, bool CashWithdrawals, decimal MonthlyLimit);

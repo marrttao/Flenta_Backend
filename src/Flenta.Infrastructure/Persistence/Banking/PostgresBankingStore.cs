@@ -38,6 +38,7 @@ internal sealed partial class PostgresBankingStore(BankingDbContext db, IOptions
             var lockId = BinaryPrimitives.ReadInt64BigEndian(hash);
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockId})", cancellationToken);
             var result = await action(cancellationToken);
+            await AddTransactionNotificationsAsync(cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return result;
@@ -94,7 +95,7 @@ internal sealed partial class PostgresBankingStore(BankingDbContext db, IOptions
         db.Transactions.AsNoTracking().SingleOrDefaultAsync(t => t.InitiatorId == owner && t.IdempotencyKey == key, cancellationToken);
 
     private IQueryable<BankTransaction> VisibleTransactions(Guid owner) => db.Transactions.AsNoTracking().Where(t => t.InitiatorId == owner
-        || t.Status == TransactionStatus.Completed && db.Accounts.Any(a => a.Id == t.DestinationAccountId && a.OwnerId == owner));
+        || t.Status == TransactionStatus.Completed && db.Accounts.Any(a => (a.Id == t.DestinationAccountId || a.Id == t.SourceAccountId) && a.OwnerId == owner));
 
     public async Task<IReadOnlyList<BankTransaction>> TransactionsAsync(Guid owner, int offset, int limit, CancellationToken cancellationToken)
     {

@@ -7,6 +7,7 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Flenta.Tests" />
     <ProjectReference Include="../Flenta.Application/Flenta.Application.csproj" />
     <ProjectReference Include="../Flenta.Domain/Flenta.Domain.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
