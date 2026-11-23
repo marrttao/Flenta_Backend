@@ -14,9 +14,9 @@ public sealed class RecipientService(IRecipientRepository repository, IBankingUn
         work.ExecuteAsync(user.Profile.Id, user.Profile.Id, async token =>
         {
             var list = await repository.RecipientsAsync(user.Profile.Id, token);
-            if (list.Count >= 100) throw new DomainValidationException("recipient.limit", "You can save at most 100 recipients.");
             var recipient = new SavedRecipient(user.Profile.Id, name, iban, clock.UtcNow);
             if (list.Any(r => r.Iban == recipient.Iban)) return Map(list.Single(r => r.Iban == recipient.Iban));
+            if (list.Count >= 100) throw new DomainValidationException("recipient.limit", "You can save at most 100 recipients.");
             repository.Add(recipient); return Map(recipient);
         }, ct);
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct) =>
